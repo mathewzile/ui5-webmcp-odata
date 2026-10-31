@@ -1,0 +1,17 @@
+{
+  "name": "ui5-webmcp-odata",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Metadata-driven WebMCP tools for OData V4 UI5 applications",
+  "workspaces": [
+    "packages/*",
+    "sample",
+    "sample/app/*"
+  ],
+  "scripts": {
+    "watch": "npm run watch --workspace=sample",
+    "typecheck": "npm run typecheck --workspace=packages/webmcp-odata",
+    "test": "npm test --workspace=packages/webmcp-odata",
+    "lint:ui5": "npm run lint:ui5 --workspace=packages/webmcp-odata"
+  }
+}

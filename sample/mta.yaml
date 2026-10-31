@@ -1,0 +1,160 @@
+_schema-version: 3.3.0
+ID: ui5-webmcp-odata-sample
+version: 1.0.0
+description: "Sample app with metadata-driven WebMCP tools for OData V4 (CAP, Fiori elements, Work Zone)"
+parameters:
+  enable-parallel-deployments: true
+  deploy_mode: html5-repo
+build-parameters:
+  before-all:
+    - builder: custom
+      commands:
+        # sample/ and the library are npm workspaces of the repo root, which holds the only lockfile
+        - npm ci --prefix ..
+        - npx cds build --production --ws-pack
+modules:
+  - name: ui5-webmcp-odata-sample-srv
+    type: nodejs
+    path: gen/srv
+    parameters:
+      instances: 1
+      buildpack: nodejs_buildpack
+    build-parameters:
+      builder: npm-ci
+    provides:
+      - name: srv-api # required by consumers of CAP services (e.g. approuter)
+        properties:
+          srv-url: ${default-url}
+    requires:
+      - name: ui5-webmcp-odata-sample-auth
+      - name: ui5-webmcp-odata-sample-db
+      - name: ui5-webmcp-odata-sample-destination
+
+  - name: ui5-webmcp-odata-sample-db-deployer
+    type: hdb
+    path: gen/db
+    parameters:
+      buildpack: nodejs_buildpack
+    requires:
+      - name: ui5-webmcp-odata-sample-db
+
+  - name: ui5-webmcp-odata-sample-app-deployer
+    type: com.sap.application.content
+    path: gen
+    build-parameters:
+      build-result: app/
+      requires:
+        - name: ui5webmcpodatasamplebooks
+          artifacts:
+            - ui5webmcpodatasamplebooks.zip
+          target-path: app/
+    requires:
+      - name: ui5-webmcp-odata-sample-auth
+      - name: ui5-webmcp-odata-sample-html5-repo-host
+        parameters:
+          content-target: true
+          config:
+            HTML5Runtime_enabled: true
+
+  - name: ui5webmcpodatasamplebooks
+    type: html5
+    path: app/books
+    build-parameters:
+      build-result: dist
+      builder: custom
+      commands:
+        - npm run build
+      supported-platforms:
+        []
+
+  - name: ui5-webmcp-odata-sample-destinations
+    type: com.sap.application.content
+    requires:
+      - name: ui5-webmcp-odata-sample-auth
+        parameters:
+          service-key:
+            name: ui5-webmcp-odata-sample-auth-key
+      - name: ui5-webmcp-odata-sample-html5-repo-host
+        parameters:
+          service-key:
+            name: ui5-webmcp-odata-sample-html5-repo-host-key
+      - name: srv-api
+      - name: ui5-webmcp-odata-sample-destination
+        parameters:
+          content-target: true
+    build-parameters:
+      no-source: true
+    parameters:
+      content:
+        instance:
+          existing_destinations_policy: update
+          destinations:
+            - Name: ui5-webmcp-odata-sample-html5-repository
+              ServiceInstanceName: ui5-webmcp-odata-sample-html5-repo-host
+              ServiceKeyName: ui5-webmcp-odata-sample-html5-repo-host-key
+              sap.cloud.service: ui5webmcpodatasample.service
+            - Name: ui5-webmcp-odata-sample-auth
+              Authentication: OAuth2UserTokenExchange
+              ServiceInstanceName: ui5-webmcp-odata-sample-auth
+              ServiceKeyName: ui5-webmcp-odata-sample-auth-key
+              sap.cloud.service: ui5webmcpodatasample.service
+
+resources:
+  - name: ui5-webmcp-odata-sample-auth
+    type: org.cloudfoundry.managed-service
+    parameters:
+      service: xsuaa
+      service-plan: application
+      path: ./xs-security.json
+      config:
+        xsappname: ui5-webmcp-odata-sample-${org}-${space}
+        tenant-mode: dedicated
+        oauth2-configuration:
+          credential-types:
+            - "binding-secret"
+            - "x509"
+        role-collections:
+          - name: 'Admin (ui5-webmcp-odata-sample ${org}-${space})'
+            description: 'generated'
+            role-template-references:
+              - '$XSAPPNAME.Admin'
+          - name: 'Viewer (ui5-webmcp-odata-sample ${org}-${space})'
+            description: 'generated'
+            role-template-references:
+              - '$XSAPPNAME.Viewer'
+  - name: ui5-webmcp-odata-sample-db
+    type: com.sap.xs.hdi-container
+    parameters:
+      service: hana
+      service-plan: hdi-shared
+  - name: ui5-webmcp-odata-sample-destination
+    type: org.cloudfoundry.managed-service
+    parameters:
+      service: destination
+      service-plan: lite
+      config:
+        # lets the managed approuter (HTML5 runtime) read this instance's destinations
+        HTML5Runtime_enabled: true
+        version: 1.0.0
+        init_data:
+          instance:
+            existing_destinations_policy: update
+            destinations:
+              # Backend of the xs-app.json route "srv-api"
+              - Name: srv-api
+                Description: CAP service of the sample
+                URL: ~{srv-api/srv-url}
+                Type: HTTP
+                ProxyType: Internet
+                Authentication: NoAuthentication
+                # the approuter forwards the user's token; CAP validates it with the XSUAA instance
+                HTML5.ForwardAuthToken: true
+                HTML5.DynamicDestination: true
+    requires:
+      - name: srv-api
+
+  - name: ui5-webmcp-odata-sample-html5-repo-host
+    type: org.cloudfoundry.managed-service
+    parameters:
+      service: html5-apps-repo
+      service-plan: app-host

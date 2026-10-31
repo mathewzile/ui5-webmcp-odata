@@ -1,0 +1,23 @@
+{
+  "name": "ui5-webmcp-odata",
+  "version": "0.1.0",
+  "description": "UI5 library that derives WebMCP tools from OData V4 metadata",
+  "keywords": ["ui5", "webmcp", "odata", "v4"],
+  "main": "src/ui5/webmcp/odata/library.ts",
+  "devDependencies": {
+    "@ui5/cli": "^4.0.33",
+    "@sapui5/types": "~1.153.0",
+    "ui5-tooling-transpile": "^3.10.0",
+    "@types/node": "^24.0.0",
+    "@ui5/linter": "^1.0.0",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.3",
+    "webmcp-types": "^0.1.0"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test test/*.test.ts",
+    "lint:ui5": "ui5lint",
+    "build": "ui5 build --clean-dest"
+  }
+}

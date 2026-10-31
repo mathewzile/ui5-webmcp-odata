@@ -1,0 +1,31 @@
+{
+  "compilerOptions": {
+    "target": "es2022",
+    "module": "es2022",
+    "skipLibCheck": true,
+    "allowJs": true,
+    "strict": true,
+    "strictPropertyInitialization": false,
+    "moduleResolution": "node",
+    "rootDir": "./webapp",
+    "outDir": "./dist",
+    "baseUrl": "./",
+    "paths": {
+      "ui5webmcpodatasamplebooks/*": [
+        "./webapp/*"
+      ],
+      "ui5/webmcp/odata/*": [
+        "../../../packages/webmcp-odata/src/ui5/webmcp/odata/*"
+      ]
+    },
+    "typeRoots": [
+      "./node_modules/@types",
+      "./node_modules/@sapui5/types",
+      "../../node_modules/@types",
+      "../../node_modules/@sapui5/types"
+    ]
+  },
+  "include": [
+    "./webapp/**/*"
+  ]
+}

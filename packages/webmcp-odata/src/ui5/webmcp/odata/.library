@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<library xmlns="http://www.sap.com/sap.ui.library.xsd">
+  <name>ui5.webmcp.odata</name>
+  <vendor>ui5-webmcp-odata</vendor>
+  <version>${version}</version>
+  <copyright>Apache-2.0</copyright>
+  <title>Metadata-driven WebMCP tools for OData V4 apps</title>
+  <documentation>Registers WebMCP tools derived from OData V4 metadata.</documentation>
+  <dependencies>
+    <dependency>
+      <libraryName>sap.ui.core</libraryName>
+    </dependency>
+    <dependency>
+      <libraryName>sap.m</libraryName>
+    </dependency>
+  </dependencies>
+</library>
