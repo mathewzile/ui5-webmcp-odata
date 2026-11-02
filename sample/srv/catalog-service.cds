@@ -8,17 +8,40 @@ service CatalogService {
   entity Books as projection on my.Books actions {
     @Core.Description: 'Increases the stock of this book by the given positive quantity and returns the updated book.'
     action addStock(quantity: Integer) returns Books;
+
+    @Core.Description: 'Sells one copy of this book and returns the updated book. Not available when the book is out of stock.'
+    @Core.OperationAvailable: in.hasStock
+    action sellOne() returns Books;
+
+    // Same action name as on Authors, but another binding type and other parameters: an overload
+    @Core.Description: 'Changes the title of this book and returns the updated book.'
+    action rename(title: String) returns Books;
   };
   annotate Books with {
     modifiedAt @odata.etag;
   };
 
-  entity Authors as projection on my.Authors;
+  entity Authors as projection on my.Authors actions {
+    @Core.Description: 'Changes the name of this author and returns the updated author.'
+    action rename(name: String) returns Authors;
+
+    // Bound to the whole collection: Authors/CatalogService.normalizeNames
+    // (on Books this would need an If-Match header, because Books has an ETag)
+    @cds.odata.bindingparameter.collection
+    @Core.Description: 'Trims and collapses repeated spaces in the names of all authors and returns how many names changed.'
+    action normalizeNames() returns Integer;
+  };
 
   entity Chapters as projection on my.Chapters;
 
+  entity Sections as projection on my.Sections;
+
   @hierarchy
   entity Genres as projection on my.Genres;
+
+  // Single instance without a key in the URL: /Shop
+  @odata.singleton
+  entity Shop as projection on my.Shop;
 
   // Reference data, not writable
   @readonly
@@ -69,6 +92,17 @@ annotate CatalogService.Chapters with @(restrict: [
   }
 ]);
 
+annotate CatalogService.Sections with @(restrict: [
+  {
+    grant: 'READ',
+    to   : ['Viewer', 'Admin']
+  },
+  {
+    grant: '*',
+    to   : 'Admin'
+  }
+]);
+
 annotate CatalogService.Genres with @(restrict: [
   {
     grant: 'READ',
@@ -92,3 +126,56 @@ annotate CatalogService.Orders with @(restrict: [{
 
 annotate CatalogService.emojifyBooks with @(requires: 'Admin');
 annotate CatalogService.topBooks with @(requires: ['Viewer', 'Admin']);
+
+// Announces which $apply transformations the service supports; the aggregate tool is built from this
+annotate CatalogService.Books with @Aggregation.ApplySupported: {
+  Transformations        : [
+    'aggregate',
+    'groupby',
+    'filter'
+  ],
+  GroupableProperties    : [
+    genre_ID,
+    author_ID,
+    currency_code
+  ],
+  AggregatableProperties : [
+    {
+      Property                  : stock,
+      SupportedAggregationMethods: [
+        'sum',
+        'min',
+        'max',
+        'average'
+      ]
+    },
+    {
+      Property                  : price,
+      SupportedAggregationMethods: [
+        'sum',
+        'min',
+        'max',
+        'average'
+      ]
+    }
+  ]
+};
+
+annotate CatalogService.Shop with @(restrict: [
+  {
+    grant: 'READ',
+    to   : ['Viewer', 'Admin']
+  },
+  {
+    grant: '*',
+    to   : 'Admin'
+  }
+]);
+
+// After addStock only the stock of this book changed, so the UI needs nothing else reloaded
+annotate CatalogService.Books actions {
+  addStock @Common.SideEffects: {
+    TargetEntities  : [in],
+    TargetProperties: ['stock']
+  };
+};

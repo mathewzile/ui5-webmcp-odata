@@ -18,6 +18,13 @@ describe("readSetCapabilities", () => {
       searchable: true,
       nonFilterable: [],
       nonSortable: [],
+      nonInsertable: [],
+      requiredOnInsert: [],
+      nonUpdatable: [],
+      nonExpandable: [],
+      expandable: true,
+      countable: true,
+      pageable: true,
       etag: false,
     });
   });

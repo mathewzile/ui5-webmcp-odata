@@ -21,14 +21,24 @@ entity Books : cuid, managed {
   stock    : Integer;
   price    : Decimal(9, 2);
   currency : Currency;
+  // Calculated on read; Core.OperationAvailable of sellOne points at it
+  hasStock : Boolean = (stock > 0);
   chapters : Composition of many Chapters
                on chapters.book = $self;
 }
 
 entity Chapters : cuid {
-  book   : Association to Books;
-  number : Integer;
-  title  : String(111);
+  book     : Association to Books;
+  number   : Integer;
+  title    : String(111);
+  sections : Composition of many Sections
+               on sections.chapter = $self;
+}
+
+entity Sections : cuid {
+  chapter : Association to Chapters;
+  number  : Integer;
+  text    : String(1111);
 }
 
 entity Genres : cuid {
@@ -41,4 +51,12 @@ entity Genres : cuid {
 entity Orders : cuid, managed {
   book     : Association to Books;
   quantity : Integer;
+}
+
+// Single instance, read and updated without a key
+entity Shop {
+  key ID      : Integer;
+      name    : String(111);
+      motto   : String(255);
+      isOpen  : Boolean default true;
 }

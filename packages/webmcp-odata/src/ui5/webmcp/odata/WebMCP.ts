@@ -6,15 +6,29 @@ import type {} from "webmcp-types";
 import {
   introspect,
   type EntitySetDescriptor,
+  type ServiceDescriptor,
 } from "./metadata/ServiceIntrospector";
-import { DEFAULT_OPTIONS, type WebMCPOptions } from "./Options";
-import { startCall } from "./runtime/Result";
+import { assignToolNames } from "./metadata/ToolNames";
+import {
+  DEFAULT_OPTIONS,
+  operationAllowed,
+  unknownEntitySets,
+  type WebMCPOptions,
+} from "./Options";
+import { loadTexts } from "./runtime/I18n";
+import { configureResults, startCall } from "./runtime/Result";
+import { refreshSetNames } from "./runtime/DeepPayload";
+import { createAggregateTool } from "./tools/AggregateTools";
+import { createBatchTool } from "./tools/BatchTools";
 import { createAppTools } from "./tools/AppTools";
 import {
   allowedOperations,
   createEntitySetTools,
 } from "./tools/EntitySetTools";
+import { createGenericTools, toolSchemas, type SetTool } from "./tools/GenericTools";
+import { createHierarchyTools } from "./tools/HierarchyTools";
 import { createOperationTool } from "./tools/OperationTools";
+import { createSingletonTools } from "./tools/SingletonTools";
 
 const LOG_COMPONENT = "ui5.webmcp.odata";
 
@@ -39,12 +53,38 @@ export default class ODataWebMCP {
     }
 
     const settings = { ...DEFAULT_OPTIONS, ...options };
-    const service = await introspect(model);
+    configureResults({ maxResultChars: settings.maxResultChars });
+    await loadTexts();
+    let service: ServiceDescriptor;
+    try {
+      service = await introspect(model, settings.maxCompositionDepth);
+    } catch (error) {
+      // A broken $metadata must not take the app down with an unhandled rejection
+      Log.error("Cannot read the service metadata", String(error), LOG_COMPONENT);
+      return null;
+    }
     const controller = new AbortController();
+    const unknown = unknownEntitySets(
+      options,
+      service.entitySets.map((set) => set.name),
+    );
+    if (unknown.length) {
+      Log.warning(
+        `Options mention entity sets the service does not have: ${unknown.join(", ")}`,
+        undefined,
+        LOG_COMPONENT,
+      );
+    }
 
-    const tools: WebMCP.ModelContextTool[] = [
-      ...createAppTools(model, service, settings.toolPrefix),
-    ];
+    const tools: WebMCP.ModelContextTool[] = [];
+    // Tools of one entity set and operation; registered as they are or behind the generic tools
+    const setTools: SetTool[] = [];
+    const addSetTool = (set: EntitySetDescriptor, tool: WebMCP.ModelContextTool) =>
+      setTools.push({
+        entitySet: set.name,
+        operation: tool.name.slice(`${settings.toolPrefix}${set.name}.`.length),
+        tool,
+      });
     // Text tables of `localized` elements (CAP `Books_texts`) are an implementation detail; opt in via `include`
     const textTypes = new Set(
       service.entitySets.flatMap((set) =>
@@ -63,16 +103,67 @@ export default class ODataWebMCP {
         continue;
       }
       included.set(set.name, set);
-      tools.push(
-        ...createEntitySetTools(
-          model,
-          set,
-          allowedOperations(set, options),
-          settings,
-        ),
+      const aggregate = createAggregateTool(model, set, settings);
+      const allowed = allowedOperations(set, options);
+      if (aggregate && allowed.includes("query")) {
+        addSetTool(set, aggregate);
+      }
+      const batch = createBatchTool(
+        model,
+        set,
+        allowed,
+        settings,
+        refreshSetNames(set, service.entitySets),
       );
+      if (batch) {
+        addSetTool(set, batch);
+      }
+      if (allowed.includes("query")) {
+        for (const tool of createHierarchyTools(model, set, settings, allowed.includes("update"))) {
+          addSetTool(set, tool);
+        }
+      }
+      for (const tool of createEntitySetTools(model, set, allowed, settings, service.entitySets)) {
+        addSetTool(set, tool);
+      }
+    }
+    // Many entity sets: one tool per operation instead of one per set and operation
+    const generic =
+      settings.toolMode === "generic" ||
+      (settings.genericThreshold !== undefined && included.size > settings.genericThreshold);
+    tools.unshift(
+      ...createAppTools(
+        model,
+        service,
+        settings.toolPrefix,
+        generic ? toolSchemas(setTools) : undefined,
+        {
+          confirmWrites: settings.confirmWrites,
+          confirmDestructive: settings.confirmDestructive,
+          confirmActions: settings.confirmActions,
+        },
+      ),
+      ...(generic
+        ? createGenericTools(setTools, settings.toolPrefix)
+        : setTools.map((entry) => entry.tool)),
+    );
+    for (const singleton of service.singletons) {
+      if (
+        (options.include && !options.include.includes(singleton.name)) ||
+        options.exclude?.includes(singleton.name)
+      ) {
+        continue;
+      }
+      tools.push(...createSingletonTools(model, singleton, settings.toolPrefix, settings.confirmWrites));
     }
     for (const operation of service.operations) {
+      // Core.OperationAvailable=false: the service never offers it; the option can narrow further
+      if (
+        operation.available === false ||
+        !operationAllowed(operation.name, options.operations)
+      ) {
+        continue;
+      }
       const set = operation.entitySet
         ? included.get(operation.entitySet)
         : undefined;
@@ -84,10 +175,25 @@ export default class ODataWebMCP {
         continue;
       }
       tools.push(
-        createOperationTool(model, operation, set, settings.toolPrefix),
+        createOperationTool(
+          model,
+          operation,
+          set,
+          settings.toolPrefix,
+          service.entitySets,
+          settings.confirmActions,
+        ),
       );
     }
-    for (const tool of tools) {
+    const { tools: named, problems } = assignToolNames(tools);
+    for (const problem of problems) {
+      Log.warning(
+        `Tool name "${problem.requested}" is registered as "${problem.assigned}" (${problem.reason})`,
+        undefined,
+        LOG_COMPONENT,
+      );
+    }
+    for (const tool of named) {
       const execute = tool.execute;
       tool.execute = (input, executeOptions) => {
         startCall();
@@ -102,7 +208,7 @@ export default class ODataWebMCP {
         Log.error(`Cannot register tool ${tool.name}`, String(error), LOG_COMPONENT);
       }
     }
-    Log.info(`Registered ${tools.length} WebMCP tools`, undefined, LOG_COMPONENT);
+    Log.info(`Registered ${named.length} WebMCP tools`, undefined, LOG_COMPONENT);
     return controller;
   }
 

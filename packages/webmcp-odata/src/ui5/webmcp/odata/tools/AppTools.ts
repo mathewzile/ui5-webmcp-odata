@@ -1,12 +1,12 @@
 import ElementRegistry from "sap/ui/core/ElementRegistry";
 import HashChanger from "sap/ui/core/routing/HashChanger";
+import type ODataContextBinding from "sap/ui/model/odata/v4/ODataContextBinding";
+import type ODataListBinding from "sap/ui/model/odata/v4/ODataListBinding";
 import type ODataModel from "sap/ui/model/odata/v4/ODataModel";
-import { objectSchema, propertySchema } from "../metadata/JsonSchema";
-import type {
-  EntitySetDescriptor,
-  OperationDescriptor,
-  ServiceDescriptor,
-} from "../metadata/ServiceIntrospector";
+import { objectSchema, propertySchema, type JsonSchema } from "../metadata/JsonSchema";
+import type { ServiceDescriptor } from "../metadata/ServiceIntrospector";
+import { objectPagePath } from "../metadata/ObjectPage";
+import { describeService, type ConfirmationSettings } from "../metadata/ServiceDescription";
 import { refreshBindings } from "../runtime/BindingRefresher";
 import { clean, entityPath, userKeyNames } from "../runtime/Keys";
 import {
@@ -16,47 +16,7 @@ import {
   success,
 } from "../runtime/Result";
 import { confirm } from "./EntitySetTools";
-
-function signature(op: OperationDescriptor): string {
-  return `${op.kind} ${op.name}(${op.parameters.map((p) => p.name).join(", ")})`;
-}
-
-function describeSet(set: EntitySetDescriptor, operations: OperationDescriptor[]) {
-  return {
-    name: set.name,
-    label: set.label,
-    description: set.description,
-    keys: set.keys,
-    allowed: {
-      read: set.readable,
-      insert: set.insertable,
-      update: set.updatable,
-      delete: set.deletable,
-      search: set.searchable,
-    },
-    draftEnabled: set.draft,
-    // `name:type`, flags: k key, c computed, g generated if omitted, i immutable, r required
-    properties: set.properties.map((prop) => {
-      const flags = [
-        prop.isKey ? "k" : "",
-        prop.computed ? "c" : "",
-        prop.computedDefault ? "g" : "",
-        prop.immutable ? "i" : "",
-        !prop.nullable ? "r" : "",
-      ].join("");
-      return `${prop.name}:${prop.edmType.replace("Edm.", "")}${flags ? ` [${flags}]` : ""}`;
-    }),
-    navigation: set.navigationProperties
-      .filter(
-        (nav) =>
-          nav.name !== "DraftAdministrativeData" && nav.name !== "SiblingEntity",
-      )
-      .map((nav) => `${nav.name} -> ${nav.target}${nav.isCollection ? "[]" : ""}`),
-    operations: operations
-      .filter((op) => op.entitySet === set.name)
-      .map(signature),
-  };
-}
+import { text } from "../runtime/I18n";
 
 /** Duck type for tables (mdc, sap.m) that expose their selection as contexts */
 interface SelectableControl {
@@ -68,19 +28,57 @@ interface SelectableControl {
 }
 
 /**
+ * The entry of the object page the user has open, from the URL hash (`Books(ID=...,IsActiveEntity=true)`).
+ * It may be the user's draft: `draft: true` then, and nothing the tools write reaches it.
+ */
+async function currentEntity(
+  model: ODataModel,
+  service: ServiceDescriptor,
+  hash: string,
+): Promise<{ entitySet: string; path: string; draft: boolean; data: unknown } | undefined> {
+  const path = objectPagePath(hash, service.entitySets.map((set) => set.name));
+  if (!path) {
+    return undefined;
+  }
+  const binding = model.bindContext(path.path);
+  try {
+    const data = await binding.requestObject();
+    return data === undefined
+      ? undefined
+      : {
+          entitySet: path.entitySet,
+          path: path.path,
+          draft: /IsActiveEntity=false/.test(path.path),
+          data: clean(data),
+        };
+  } catch {
+    // The page may be a create page or no longer exist; the hash alone is still returned
+    return undefined;
+  } finally {
+    binding.destroy();
+  }
+}
+
+/**
  * Cross-cutting tools that are not tied to one entity set.
  */
 export function createAppTools(
   model: ODataModel,
   service: ServiceDescriptor,
   prefix: string,
+  /** Input schemas of the per-set tools, if they are only reachable through the generic tools */
+  schemas?: Record<string, Record<string, JsonSchema>>,
+  confirmation?: ConfirmationSettings,
 ): WebMCP.ModelContextTool[] {
   return [
     {
       name: `${prefix}app.describe_service`,
       title: "Describe OData service",
       description:
-        "Lists the entity sets of the OData service with keys, properties, allowed operations and relations. Call this first to learn what data is available.",
+        "Lists the entity sets of the OData service with keys, properties, allowed operations and relations. Call this first to learn what data is available." +
+        (schemas
+          ? " With 'entitySet' it also returns 'tools': the input schema of each entity.* tool for that set, which you pass as 'arguments'."
+          : ""),
       inputSchema: objectSchema({
         entitySet: {
           type: "string",
@@ -90,14 +88,14 @@ export function createAppTools(
       annotations: { readOnlyHint: true },
       execute: (input) => {
         const only = (input as { entitySet?: string }).entitySet;
+        const description = describeService(service, confirmation, only);
         return serialize(
           success({
-            entitySets: service.entitySets
-              .filter((set) => !only || set.name === only)
-              .map((set) => describeSet(set, service.operations)),
-            unboundOperations: service.operations
-              .filter((op) => !op.entitySet)
-              .map(signature),
+            ...description,
+            entitySets: description.entitySets.map((set) => ({
+              ...set,
+              ...(only && schemas ? { tools: schemas[set.name] } : {}),
+            })),
           }),
         );
       },
@@ -115,11 +113,13 @@ export function createAppTools(
       }),
       annotations: {},
       execute: (input) => {
-        const refreshed = refreshBindings(
+        const { refreshed, skipped } = refreshBindings(
           model,
           (input as { entitySet?: string }).entitySet,
         );
-        return serialize(success({ refreshed }));
+        return serialize(
+          success({ refreshed, skippedBecauseOfUnsavedChanges: skipped }),
+        );
       },
     },
     {
@@ -127,7 +127,8 @@ export function createAppTools(
       title: "Get messages",
       description:
         "Returns the messages (errors, warnings, info) currently shown in the app, such as server validation errors.",
-      annotations: { readOnlyHint: true },
+      // Message texts come from the service
+      annotations: { readOnlyHint: true, untrustedContentHint: true },
       execute: () => serialize(success(currentMessages(true))),
     },
     {
@@ -149,17 +150,29 @@ export function createAppTools(
         if (!model.hasPendingChanges()) {
           return serialize(success({ discarded: false }));
         }
-        if (!(await confirm("Discard all unsaved changes?"))) {
+        if (!(await confirm(text("confirmDiscard")))) {
           return serialize(
             failure(new Error("The user declined"), "declined"),
           );
         }
         try {
-          await Promise.all([
-            model.resetChanges("$auto"),
-            model.resetChanges("$direct"),
-          ]);
-          return serialize(success({ discarded: true }));
+          // The model's own update group ($auto by default); `$direct` is not allowed here.
+          // Changes in other groups (Fiori elements uses its own) are reset on their bindings.
+          model.resetChanges();
+          const pending = model
+            .getAllBindings()
+            .filter(
+              (binding) =>
+                binding.isA([
+                  "sap.ui.model.odata.v4.ODataListBinding",
+                  "sap.ui.model.odata.v4.ODataContextBinding",
+                ]) &&
+                (binding as ODataListBinding | ODataContextBinding).hasPendingChanges(),
+            ) as (ODataListBinding | ODataContextBinding)[];
+          await Promise.all(pending.map((binding) => binding.resetChanges()));
+          return serialize(
+            success({ discarded: true, stillPending: model.hasPendingChanges() }),
+          );
         } catch (error) {
           return serialize(failure(error));
         }
@@ -171,7 +184,7 @@ export function createAppTools(
       description:
         "Returns what the user currently sees: the page location (URL hash) and the rows they have selected in tables. Use for requests like 'update the selected items'.",
       annotations: { readOnlyHint: true, untrustedContentHint: true },
-      execute: () => {
+      execute: async () => {
         const tables = ElementRegistry
           .filter(
             (element) =>
@@ -204,8 +217,9 @@ export function createAppTools(
                     JSON.stringify(table.selected),
               ) === index,
           );
+        const hash = HashChanger.getInstance().getHash();
         return serialize(
-          success({ hash: HashChanger.getInstance().getHash(), tables }),
+          success({ hash, currentEntity: await currentEntity(model, service, hash), tables }),
         );
       },
     },

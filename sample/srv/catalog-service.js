@@ -13,7 +13,7 @@ const stripEmoji = (title = "") =>
 
 export default class CatalogService extends cds.ApplicationService {
   init() {
-    const { Books } = this.entities;
+    const { Books, Authors } = this.entities;
 
     // Bound action: Books(ID=...,IsActiveEntity=true)/CatalogService.addStock
     this.on("addStock", Books, async (req) => {
@@ -24,6 +24,51 @@ export default class CatalogService extends cds.ApplicationService {
       const [{ ID }] = req.params;
       await UPDATE(Books, ID).with(`stock = stock + ${Number(quantity)}`);
       return SELECT.one.from(Books, ID);
+    });
+
+    this.on("sellOne", Books, async (req) => {
+      const [{ ID }] = req.params;
+      const { stock } = await SELECT.one.from(Books, ID).columns("stock");
+      if (!(stock > 0)) {
+        return req.error(409, "The book is out of stock");
+      }
+      await UPDATE(Books, ID).with("stock = stock - 1");
+      return SELECT.one.from(Books, ID);
+    });
+
+    // Overload: one name, bound to two entity types with different parameters
+    this.on("rename", Books, async (req) => {
+      const [{ ID }] = req.params;
+      const { title } = req.data;
+      if (!title?.trim()) {
+        return req.error(400, "title must not be empty");
+      }
+      await UPDATE(Books, ID).with({ title });
+      return SELECT.one.from(Books, ID);
+    });
+
+    this.on("rename", Authors, async (req) => {
+      const [{ ID }] = req.params;
+      const { name } = req.data;
+      if (!name?.trim()) {
+        return req.error(400, "name must not be empty");
+      }
+      await UPDATE(Authors, ID).with({ name });
+      return SELECT.one.from(Authors, ID);
+    });
+
+    // Bound to the collection, so there is no key in req.params
+    this.on("normalizeNames", Authors, async () => {
+      const authors = await SELECT.from(Authors).columns("ID", "name");
+      let changed = 0;
+      for (const { ID, name } of authors) {
+        const normalized = (name ?? "").trim().replace(/\s+/g, " ");
+        if (normalized !== name) {
+          await UPDATE(Authors, ID).with({ name: normalized });
+          changed++;
+        }
+      }
+      return changed;
     });
 
     this.on("topBooks", async (req) => {

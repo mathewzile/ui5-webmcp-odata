@@ -72,6 +72,25 @@ export const metadata = {
     ID: guid,
     name: { $kind: "Property", $MaxLength: 111, $Nullable: false },
     createdAt: { $kind: "Property", $Type: "Edm.DateTimeOffset" },
+    tags: { $kind: "Property", $isCollection: true },
+    rating: { $kind: "Property", $Type: "CatalogService.Rating" },
+    address: { $kind: "Property", $Type: "CatalogService.Address" },
+    photo: { $kind: "Property", $Type: "Edm.Stream" },
+  },
+  "CatalogService.Rating": {
+    $kind: "TypeDefinition",
+    $UnderlyingType: "Edm.Decimal",
+    $Precision: 3,
+    $Scale: 1,
+  },
+  "CatalogService.Address": {
+    $kind: "ComplexType",
+    street: { $kind: "Property", $Nullable: false },
+    country: { $kind: "Property", $Type: "CatalogService.Country" },
+  },
+  "CatalogService.Country": {
+    $kind: "ComplexType",
+    code: { $kind: "Property", $MaxLength: 2 },
   },
   "CatalogService.Orders": {
     $kind: "EntityType",
@@ -89,6 +108,26 @@ export const metadata = {
       ],
       $ReturnType: { $Type: "CatalogService.Books" },
     },
+    // Same name, bound to another type and with other parameters
+    {
+      $kind: "Action",
+      $IsBound: true,
+      $Parameter: [
+        { $Type: "CatalogService.Authors", $Name: "in" },
+        { $Type: "Edm.Int32", $Name: "amount", $Nullable: false },
+        { $Type: "Edm.String", $Name: "reason" },
+      ],
+    },
+  ],
+  "CatalogService.importBooks": [
+    {
+      $kind: "Action",
+      $IsBound: true,
+      $Parameter: [
+        { $Type: "CatalogService.Books", $isCollection: true, $Name: "in" },
+        { $Type: "Edm.String", $Name: "source", $Nullable: false },
+      ],
+    },
   ],
   "CatalogService.draftEdit": [
     {
@@ -105,12 +144,21 @@ export const metadata = {
       $ReturnType: { $Type: "CatalogService.Books", $isCollection: true },
     },
   ],
+  "CatalogService.Settings": {
+    $kind: "EntityType",
+    $Key: ["ID"],
+    ID: guid,
+    theme: { $kind: "Property" },
+  },
   "CatalogService.EntityContainer": {
     $kind: "EntityContainer",
+    Settings: { $kind: "Singleton", $Type: "CatalogService.Settings" },
     Books: { $kind: "EntitySet", $Type: "CatalogService.Books" },
     Books_texts: { $kind: "EntitySet", $Type: "CatalogService.Books_texts" },
     Authors: { $kind: "EntitySet", $Type: "CatalogService.Authors" },
     Orders: { $kind: "EntitySet", $Type: "CatalogService.Orders" },
+    // A second set of the same type: bound operations belong to both
+    ArchivedBooks: { $kind: "EntitySet", $Type: "CatalogService.Books" },
     emojifyBooks: {
       $kind: "ActionImport",
       $Action: "CatalogService.emojifyBooks",
@@ -144,6 +192,21 @@ export const metadata = {
     },
     "CatalogService.Books/title": {
       "@com.sap.vocabularies.Common.v1.Label": "Title",
+      "@com.sap.vocabularies.Common.v1.FieldControl": {
+        $EnumMember: "com.sap.vocabularies.Common.v1.FieldControlType/Mandatory",
+      },
+    },
+    "CatalogService.Books/stock": {
+      "@Org.OData.Validation.V1.Minimum": 0,
+      "@Org.OData.Validation.V1.Maximum": 9999,
+      "@com.sap.vocabularies.Common.v1.Text": { $Path: "title" },
+    },
+    "CatalogService.EntityContainer/ArchivedBooks": {
+      "@Org.OData.Aggregation.V1.ApplySupported": {
+        Transformations: ["aggregate", "groupby"],
+        GroupableProperties: [{ $PropertyPath: "status" }],
+      },
+      "@Org.OData.Capabilities.V1.ExpandRestrictions": { Expandable: false },
     },
     "CatalogService.Books/modifiedAt": { "@Org.OData.Core.V1.Computed": true },
     "CatalogService.Authors/createdAt": {
@@ -156,6 +219,10 @@ export const metadata = {
     // Operation targets: bound actions name the binding parameter only, functions all parameters
     "CatalogService.addStock(CatalogService.Books)": {
       "@Org.OData.Core.V1.Description": "Increases the stock",
+      "@Org.OData.Core.V1.OperationAvailable": { $Path: "canAddStock" },
+      "@com.sap.vocabularies.Common.v1.SideEffects": {
+        TargetProperties: ["stock"],
+      },
     },
     "CatalogService.emojifyBooks()": {
       "@Org.OData.Core.V1.Description": "Adds emoji to titles",

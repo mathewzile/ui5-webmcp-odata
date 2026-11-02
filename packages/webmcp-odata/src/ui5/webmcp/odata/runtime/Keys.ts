@@ -1,17 +1,9 @@
 import ODataUtils from "sap/ui/model/odata/v4/ODataUtils";
 import type { EntitySetDescriptor } from "../metadata/ServiceIntrospector";
 
-/** Draft administration properties that clients never write */
-export const DRAFT_PROPERTIES = new Set([
-  "IsActiveEntity",
-  "HasActiveEntity",
-  "HasDraftEntity",
-]);
+import { userKeyNames } from "../metadata/Writable";
 
-/** Key properties the caller has to provide; IsActiveEntity is always `true` for us */
-export function userKeyNames(set: EntitySetDescriptor): string[] {
-  return set.keys.filter((key) => key !== "IsActiveEntity");
-}
+export { DRAFT_PROPERTIES, userKeyNames } from "../metadata/Writable";
 
 /**
  * Absolute path of a single entity, e.g. `/Books(ID=...,IsActiveEntity=true)`.
