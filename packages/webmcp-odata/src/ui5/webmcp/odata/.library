@@ -3,7 +3,7 @@
   <name>ui5.webmcp.odata</name>
   <vendor>ui5-webmcp-odata</vendor>
   <version>${version}</version>
-  <copyright>Apache-2.0</copyright>
+  <copyright>MIT</copyright>
   <title>Metadata-driven WebMCP tools for OData V4 apps</title>
   <documentation>Registers WebMCP tools derived from OData V4 metadata.</documentation>
   <dependencies>

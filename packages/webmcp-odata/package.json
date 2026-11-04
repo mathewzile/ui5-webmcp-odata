@@ -2,8 +2,30 @@
   "name": "ui5-webmcp-odata",
   "version": "0.1.0",
   "description": "UI5 library that derives WebMCP tools from OData V4 metadata",
-  "keywords": ["ui5", "webmcp", "odata", "v4"],
+  "keywords": [
+    "ui5",
+    "sapui5",
+    "webmcp",
+    "mcp",
+    "odata",
+    "odata-v4",
+    "ai-agent"
+  ],
+  "license": "MIT",
+  "author": "Mathew Cheong",
+  "homepage": "https://github.com/mathewzile/ui5-webmcp-odata#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mathewzile/ui5-webmcp-odata.git",
+    "directory": "packages/webmcp-odata"
+  },
+  "bugs": {
+    "url": "https://github.com/mathewzile/ui5-webmcp-odata/issues"
+  },
   "main": "src/ui5/webmcp/odata/library.ts",
+  "engines": {
+    "node": ">=20"
+  },
   "devDependencies": {
     "@ui5/cli": "^4.0.33",
     "@sapui5/types": "~1.153.0",
@@ -18,6 +40,8 @@
     "typecheck": "tsc --noEmit",
     "test": "tsx --test test/*.test.ts",
     "lint:ui5": "ui5lint",
-    "build": "ui5 build --clean-dest"
-  }
+    "build": "ui5 build --clean-dest",
+    "build:package": "node scripts/build-package.mjs"
+  },
+  "private": true
 }

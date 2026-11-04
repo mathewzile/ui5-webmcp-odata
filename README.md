@@ -10,6 +10,7 @@ authorizations, and the lists and object pages on screen are refreshed after cha
 It evolved from a proof of concept with hand-written tools (hierarchy designer). Nothing is hand-written here: add
 the library, one line in your `Component`, and tools appear for every entity set and action the metadata exposes.
 
+> **Experimental (0.x):** this package is experimental and its API may change between minor versions.
 > WebMCP is an experimental browser API. The library does nothing (and costs nothing) in browsers without
 > `document.modelContext`.
 
@@ -36,34 +37,32 @@ versions are untested.
 
 ### 1. Get the library
 
-The library is TypeScript and **not published to npm yet**. Add it the way the sample does, as an npm workspace
-or a path/tarball/git dependency of your app:
-
-```json
-{ "dependencies": { "ui5-webmcp-odata": "*" } }
+```sh
+npm install ui5-webmcp-odata
 ```
 
-UI5 tooling picks it up through its `ui5.yaml` (`type: library`, name `ui5.webmcp.odata`). Because the library is
-TypeScript, the tooling has to transpile it, even if your own app is JavaScript.
+The package contains plain JavaScript (UI5 `sap.ui.define` modules) and `.d.ts` files. UI5 tooling picks it up
+through its `ui5.yaml` (`type: library`, name `ui5.webmcp.odata`); your app does not need any transpile tooling for
+it. (Inside this repo, the sample uses the TypeScript source as an npm workspace dependency instead.)
 
 ### 2. Configure the UI5 tooling
 
-In your app's `ui5.yaml`, add the transpile task and middleware, and let the middleware transpile dependencies:
+Nothing for the library itself. Two things to know:
 
-```yaml
-builder:
-  customTasks:
-    - name: ui5-tooling-transpile-task
-      afterTask: replaceVersion
-server:
-  customMiddleware:
-    - name: ui5-tooling-transpile-middleware
-      afterMiddleware: compression
-      configuration:
-        transpileDependencies: true   # experimental flag of ui5-tooling-transpile
-```
+- **Fiori tools proxy.** If your `ui5.yaml` uses `fiori-tools-proxy` with `afterMiddleware: compression`, it forwards
+  every `/resources` request to the SAPUI5 CDN, and the library answers 404 on the dev server. Place the proxy after
+  the local resources instead, so only unresolved requests are forwarded:
 
-and add `ui5-tooling-transpile` to your app's `devDependencies`.
+  ```yaml
+  server:
+    customMiddleware:
+      - name: fiori-tools-proxy
+        afterMiddleware: serveResources
+  ```
+
+- **Deployment.** If the runtime (for example SAP Build Work Zone / the HTML5 repo) does not provide the library,
+  bundle it into your app archive (the sample does it with `ui5-task-zipper`, see its `ui5.yaml`) and build with
+  `--include-dependency ui5.webmcp.odata`.
 
 ### 3. Declare the library in `manifest.json`
 
@@ -397,11 +396,11 @@ unbound actions refresh everything.
   field values being edited on an object page. `app.navigate` assumes the Fiori elements hash format.
 
 **Deferred** (not part of this version): upload of media and `Edm.Stream` properties; per-user tool filtering (the
-metadata is not user specific); publishing to npm and a JavaScript build; refreshing through `requestSideEffects` on UI
+metadata is not user specific); refreshing through `requestSideEffects` on UI
 contexts.
 
-**Packaging**: the library ships as TypeScript and is not published to npm, so consuming apps need
-`ui5-tooling-transpile` and must bundle the library themselves (the sample does it with the zipper task).
+**Packaging**: the npm package contains built JavaScript; a TypeScript app gets types from the shipped `.d.ts` files.
+Apps that cannot rely on the library being present at runtime must bundle it themselves (see step 2).
 
 ---
 
@@ -522,7 +521,11 @@ npm install
 npm test                # unit tests (packages/webmcp-odata)
 npm run typecheck       # tsc over src and tests
 npm run lint:ui5 --workspace=packages/webmcp-odata
+npm run build:package --workspace=packages/webmcp-odata   # JS package in packages/webmcp-odata/dist/package
 ```
+
+Publish `packages/webmcp-odata/dist/package` (`npm publish packages/webmcp-odata/dist/package`), never the workspace
+folder: that one is `private` and holds TypeScript sources.
 
 - `packages/webmcp-odata/src/ui5/webmcp/odata/`: `WebMCP.ts` (entry), `metadata/` (introspection, annotations, JSON
   Schema and the pure decisions: `ApplyBuilder`, `DeepSchema`, `HierarchyQuery`, `ToolNames`, `Validate`,
@@ -584,3 +587,7 @@ open: a few hung requests starve every other tab.
 Not verified: the German texts in a browser (the dev server does not serve the bundle, so it shows English); the
 `SideEffects` target selection beyond the unit test (the list reloads after `addStock`, but only one list is on
 screen, so it cannot show that other sets are skipped); the HANA/XSUAA runtime behavior of the deployed app.
+
+## License
+
+[MIT](LICENSE)
