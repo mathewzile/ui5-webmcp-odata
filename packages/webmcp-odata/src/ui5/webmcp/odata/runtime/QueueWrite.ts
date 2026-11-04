@@ -23,7 +23,8 @@ function staleEtagError(): Error & { status: number } {
 export function createPayload(set: EntitySetDescriptor, input: Input): Input {
   const payload = pick(input, createProperties(set).map((prop) => prop.name));
   for (const composition of set.compositions) {
-    if (input[composition.name] !== undefined) {
+    // null on a to-one composition means no child; there is nothing to create
+    if (input[composition.name] !== undefined && input[composition.name] !== null) {
       payload[composition.name] = childPayload(composition, input[composition.name]);
     }
   }

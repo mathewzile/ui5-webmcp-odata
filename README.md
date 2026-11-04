@@ -165,32 +165,30 @@ Pass them in the manifest (`sap.ui5` > `ui5.webmcp`) or to `ODataWebMCP.register
 |---|---|---|
 | `include` | all | Only these entity sets (and singletons) get tools. Also the way to get tools for CAP text tables (`Books_texts`), which are skipped by default |
 | `exclude` | none | Entity sets that never get tools |
-| `entitySets.<Set>.operations` | all | Narrow the CRUD tools of one set, e.g. `["query", "get"]`; the metadata restrictions apply on top |
+| `entitySets.<Set>.operations` | all | Narrow the CRUD tools of one set, e.g. `["query", "get"]`; metadata restrictions apply on top |
 | `entitySets.<Set>.skipOperations` | `false` | No tools for actions and functions bound to this set |
 | `operations` | all | `{ include?, exclude? }`: which actions and functions (by simple name, bound ones included) get tools |
 | `toolPrefix` | `""` | Prefix for every tool name, e.g. `"bookshop."` |
 | `maxTop` | `50` | Page size limit of query, aggregate and hierarchy tools |
-| `maxResultChars` | `50000` | Largest tool result in characters. A longer list loses rows from the end and is marked `truncated`; a single entry that is too large fails with `tooLarge` |
-| `maxCompositionDepth` | `3` | How many levels of compositions deep create and update reach (Book → chapters → sections is 3) |
+| `maxResultChars` | `50000` | Largest tool result. A longer list loses rows from the end and is marked `truncated`; a single entry that is too large fails with `tooLarge` |
+| `maxCompositionDepth` | `3` | How many composition levels deep create and update reach (Book → chapters → sections is 3) |
 | `maxBatchItems` | `50` | Most entries one `.batch` call may create, update and delete together |
 | `maxHierarchyNodes` | `1000` | Most nodes a hierarchy move or `ancestors` loads; larger hierarchies fail with `hierarchyTooLarge` |
-| `confirmDestructive` | `true` | Ask the user in the UI before a delete (also for deletions inside a batch or a deep update) |
+| `confirmDestructive` | `true` | Ask the user before a delete (also inside a batch or a deep update) |
 | `confirmWrites` | `false` | Also ask before create, update, move, batch and singleton update |
 | `confirmActions` | `false` | Ask before actions run: `true` for all, or the names of the actions |
 | `toolMode` | `"perSet"` | `"generic"` registers one tool per operation (`entity.query`, ...) that takes the entity set as an argument, see [Many entity sets](#many-entity-sets-generic-tools) |
-| `genericThreshold` | off | Switch to the generic tools automatically when more entity sets than this get tools |
+| `genericThreshold` | off | Switch to the generic tools when more entity sets than this get tools |
 | `exposedTo` | – | Origins allowed to call the tools, passed to `registerTool` |
 
-Names in `include`, `exclude` and `entitySets` that the service does not have are logged as a warning, so a typo
-does not silently do nothing.
+Names in `include`, `exclude` and `entitySets` that the service does not have are logged as a warning. Every action
+and function is exposed unless its set is excluded or `operations` filters it; an action the metadata marks as never
+available (`Core.OperationAvailable: false`) gets no tool.
 
-Every action and function is exposed unless its entity set is excluded or `operations` filters it. An action
-the metadata marks as never available (`Core.OperationAvailable: false`) gets no tool.
-
-**Texts for the user.** Confirmation dialogs and toasts come from `i18n/i18n.properties` of the library
-(English, German). Everything addressed to the agent (tool descriptions, error messages in results) stays English
-on purpose. The bundle is loaded from the library's resources; if it cannot be loaded (a dev server that only serves
-the transpiled code, for instance) the built-in English texts are used.
+**Texts for the user.** Confirmation dialogs and toasts come from `i18n/i18n.properties` (English, German).
+Everything addressed to the agent (tool descriptions, error messages) stays English on purpose. If the bundle cannot
+be loaded, the built-in English texts are used. That is the case on the UI5 dev server with `transpileDependencies`,
+which serves only the library's transpiled code; the built app serves the bundle.
 
 ---
 
@@ -202,48 +200,45 @@ Names are `<EntitySet>.<operation>`; all tools return JSON.
 
 | Tool | Created unless | Notes |
 |---|---|---|
-| `.query` | `ReadRestrictions/Readable: false` | `filter`, `select`, `orderby`, `expand`, `search` (if searchable), `top`, `skip`. Returns `count` (total), `hasMore` and pages in a stable order |
+| `.query` | `ReadRestrictions/Readable: false` | `filter`, `select`, `orderby`, `expand`, `search` (if searchable), `top`, `skip`. Returns `count` (total) and `hasMore`, in a stable order |
 | `.get` | `ReadRestrictions/Readable: false` | by key |
 | `.create` | `InsertRestrictions/Insertable: false` | compositions as nested data, several levels deep |
-| `.update` | `UpdateRestrictions/Updatable: false` | `changes` plus the key, optional `etag`; compositions as nested data (deep update, see below) |
-| `.delete` | `DeleteRestrictions/Deletable: false` | asks the user to confirm in the UI; optional `etag` |
+| `.update` | `UpdateRestrictions/Updatable: false` | `changes` plus the key, optional `etag`; compositions as nested data (deep update, below) |
+| `.delete` | `DeleteRestrictions/Deletable: false` | asks the user to confirm; optional `etag` |
 | `.batch` | the set is not insertable, updatable or deletable at all | `{ create?, update?, delete? }` in **one** request: all or nothing |
-| `.aggregate` | no `Aggregation.ApplySupported` | `groupBy`, `aggregate` (`{property, with, as}`), `count`, `filter`, `orderby`, `top`, `skip`; only what the service announces |
-| `.hierarchy`, `.move` | no `Aggregation.RecursiveHierarchy` | read a tree (`roots`, `children`, `descendants`, `ancestors`, `tree`) and move a node with its subtree to a new parent |
+| `.aggregate` | no `Aggregation.ApplySupported` | `groupBy`, `aggregate` (`{property, with, as}`; no `with` for custom aggregates), `count`, `filter`, `orderby`, `top`, `skip`; only what the service announces |
+| `.hierarchy`, `.move` | no `Aggregation.RecursiveHierarchy` | read a tree (`roots`, `children`, `descendants`, `ancestors`, `tree`); move a node with its subtree to a new parent |
 
-In CAP, `@readonly` and `@insertonly` produce the restrictions, `@hierarchy` the recursive hierarchy, and
-`@Aggregation.ApplySupported` has to be annotated by hand (see the sample).
-
-**Singletons** (`@odata.singleton` in CAP) get `<Name>.get`, and `<Name>.update` if the service allows updates.
+In CAP, `@readonly` and `@insertonly` produce the restrictions and `@hierarchy` the recursive hierarchy;
+`@Aggregation.ApplySupported` has to be annotated by hand (see the sample). **Singletons** (`@odata.singleton`) get
+`<Name>.get`, and `<Name>.update` if the service allows it.
 
 **Input schemas follow the metadata.**
 - `Core.Computed` properties are not accepted on create; keys and `Core.Immutable` properties cannot be changed;
   non-nullable properties are required; `Core.ComputedDefaultValue` (CAP `cuid` keys) is optional on create.
-- Restrictions are respected: `NonInsertableProperties`, `NonUpdatableProperties`, `RequiredProperties`,
+- Respected restrictions: `NonInsertableProperties`, `NonUpdatableProperties`, `RequiredProperties`,
   `NonSortableProperties` (rejected in `orderby`), `ExpandRestrictions`, `CountRestrictions`, `TopSupported`.
-- Edm types map to JSON Schema: `Int64` and `Decimal` are strings (like in the UI5 V4 model; `Decimal` gets a
-  pattern from `precision` and `scale`), dates, durations and GUIDs carry a `format` or pattern, enums become `enum`,
-  nullable properties accept `null`, collections become arrays, complex types objects, type definitions their
-  underlying type.
-- `Validation.Minimum/Maximum/AllowedValues` and static `Common.FieldControl` (read-only, mandatory) are applied;
-  `Common.Label`, `Core.Description`, `Common.Text` and the target of `Common.ValueList` end up in the descriptions.
-- `Edm.Stream` and Geo properties are left out of writable properties.
+- Edm types map to JSON Schema: `Int64` and `Decimal` are strings (as in the UI5 V4 model; `Decimal` gets a pattern
+  from `precision`/`scale`), dates, durations and GUIDs carry a `format` or pattern, enums become `enum`, nullable
+  properties accept `null`, collections become arrays, complex types objects, type definitions their underlying type.
+  `Edm.Stream` and Geo properties are not writable.
+- `Validation.Minimum/Maximum/AllowedValues` and static `Common.FieldControl` are applied; `Common.Label`,
+  `Core.Description`, `Common.Text` and the target of `Common.ValueList` end up in the descriptions.
 
-**Deep create and update.** Compositions are nested arrays or objects, up to `maxCompositionDepth` levels. On
-create the tree is created in one request. On update, a composition array in the input is the **full new set**, like
-a CAP deep `PATCH`: children with a key that exist are updated, children without a key are created, and children
-that are **missing from the array are deleted** (an empty array deletes all; a composition left out of the input is
-not touched). Everything goes into one batch, so it is atomic, and the user is asked before children are deleted
-(`confirmDestructive`).
+**Deep create and update.** Compositions are nested arrays or objects, up to `maxCompositionDepth` levels. Create
+makes the whole tree in one request. On update, a composition array is the **full new set**, like a CAP deep `PATCH`:
+children whose key exists are updated, children without a key are created, and children **missing from the array are
+deleted** (an empty array deletes all; a composition left out of the input is untouched). A to-one composition
+(`Books.cover`) is changed in place and `null` deletes it; a missing to-one child cannot be created by an update. It
+all goes into one batch, so it is atomic, and the user is asked before children are deleted (`confirmDestructive`).
 
-**Actions and functions** become tools: `<Name>` for unbound and `<EntitySet>.<Name>` for bound ones.
-- Functions are marked read-only; a `Core.Description` on the operation becomes the tool description, so write one.
-- An action bound to a **collection** (`Authors.normalizeNames`) takes no key. Overloads (the same name bound to
-  several sets) get the parameters of their own set. Names that would collide get a numeric suffix.
+**Actions and functions** become tools: `<Name>` if unbound, `<EntitySet>.<Name>` if bound.
+- Functions are read-only. A `Core.Description` on the operation becomes the tool description, so write one.
+- A collection-bound action (`Authors.normalizeNames`) takes no key. Overloads (one name bound to several sets) get
+  the parameters of their own set; colliding names get a numeric suffix.
 - `Core.OperationAvailable`: `false` hides the tool; a path (`in/hasStock`) is checked on the entry and fails with
   `notAvailable` when it is `false`.
-- Bound actions and functions accept the entry's `etag`.
-- `Common.SideEffects` on an operation limits what is refreshed afterwards.
+- Bound operations accept the entry's `etag`. `Common.SideEffects` limits what is refreshed afterwards.
 
 **App tools**
 
@@ -254,17 +249,16 @@ not touched). Everything goes into one batch, so it is atomic, and the user is a
 | `app.get_messages` | Current UI5 messages (server errors and warnings) |
 | `app.pending_changes` | Whether the user has unsaved edits |
 | `app.reset_changes` | Discard the user's unsaved edits in all groups (asks to confirm) |
-| `app.get_current_context` | URL hash, the rows selected in tables, and `currentEntity` (key and data of the object page that is open) |
+| `app.get_current_context` | URL hash, the rows selected in tables, and `currentEntity` (key and data of the open object page) |
 | `app.navigate` | Open an entity set's list or one entry (Fiori elements hash `<Set>(<key>)`) |
 
 ### Many entity sets: generic tools
 
-A service with 40 entity sets would get over 200 tools. With `toolMode: "generic"` (or `genericThreshold`) the
-library registers one tool per operation instead: `entity.query`, `entity.get`, `entity.create`, `entity.update`,
-`entity.delete`, `entity.batch`, `entity.aggregate`, `entity.hierarchy`, `entity.move`. Each takes
-`entitySet` and `arguments`, which are checked against the same schema the per-set tool would have, then run the
-same handler. `app.describe_service` with `entitySet` returns those schemas. Operations (actions and functions)
-and singleton tools stay separate tools.
+A service with 40 entity sets would get over 200 tools. With `toolMode: "generic"` (or `genericThreshold`) the library
+registers one tool per operation instead: `entity.query`, `.get`, `.create`, `.update`, `.delete`, `.batch`,
+`.aggregate`, `.hierarchy`, `.move`. Each takes `entitySet` and `arguments`, which are checked against the schema the
+per-set tool would have and then run the same handler. `app.describe_service` with `entitySet` returns those schemas.
+Actions, functions and singleton tools stay separate tools.
 
 ### Results
 
@@ -283,10 +277,9 @@ and singleton tools stay separate tools.
 | `hierarchyTooLarge`, `tooLarge` | more data than `maxHierarchyNodes` / `maxResultChars` allow |
 | `error` | anything else |
 
-`ui` reports what was refreshed and which bindings were skipped because of unsaved user changes. `messages` only
-contains what came up during that call (with the limit noted under Limitations). Results that carry data from
-the service (queries, functions, actions with a return value, `app.get_messages`, aggregate, hierarchy) are
-marked `untrustedContentHint`.
+`ui` reports what was refreshed and which bindings were skipped because of unsaved user changes. `messages` holds
+what came up during that call (see Limitations). Results carrying service data (queries, functions, actions with a
+return value, `app.get_messages`, aggregate, hierarchy) are marked `untrustedContentHint`.
 
 ---
 
@@ -297,11 +290,11 @@ Tools never create or edit drafts. They read and write the **active** data direc
 
 Before an update, a delete, or a bound action on a **draft root**, the library reads `HasDraftEntity` and
 `DraftAdministrativeData`. If a draft exists it refuses with `reason: "draftExists"` and says who holds it, because
-activating that draft later would silently overwrite the change. The check runs before any confirmation dialog.
-For an action on a draft **node** (`Chapters`), the check is made against its root.
+activating that draft later would silently overwrite the change. The check runs before any confirmation dialog; for an
+action on a draft **node** (`Chapters`) it is made against the root.
 
-CAP enforces the same on the server (checked against the sample), so the library is the friendly layer and the
-server the backstop:
+For changes and deletes CAP enforces the same on the server (checked against the sample), so the library is the
+friendly layer and the server the backstop:
 
 | Request on the active entity while a draft exists | Result |
 |---|---|
@@ -309,60 +302,55 @@ server the backstop:
 | `DELETE` | `403 DRAFT_ACTIVE_DELETE_FORBIDDEN_DRAFT_EXISTS` |
 | `PATCH` with a stale `@odata.etag` | `412`, reported as `reason: "precondition"` |
 
-**Draft nodes.** Child entities of a draft tree can only be changed through their root: CAP answers a direct
-`PATCH`/`POST`/`DELETE` on `/Chapters(ID)` with `422 DRAFT_MODIFICATION_ONLY_VIA_ROOT`. So nodes get no
-create/update/delete tools (they are detected through `Common.DraftRoot`/`DraftNode`); changes go through the
-root's `update`. Deep update works because the same changes through the parent's navigation path
-(`/Books(..)/chapters(..)`) are accepted under the bypass, so the library does it all with `ODataModel` relative
-bindings and no raw `fetch` is needed.
+CAP does **not** block bound actions while a draft exists (`addStock` on a book and an action on one of its chapters
+both returned 200 with a draft open), so for actions the library's check is the only protection.
+
+**Draft nodes.** Children of a draft tree can only be changed through their root: CAP answers a direct
+`PATCH`/`POST`/`DELETE` on `/Chapters(ID)` with `422 DRAFT_MODIFICATION_ONLY_VIA_ROOT`. So nodes (detected through
+`Common.DraftRoot`/`DraftNode`) get no create/update/delete tools; changes go through the root's `update`. The same
+changes through the parent's navigation path (`/Books(..)/chapters(..)`) are accepted under the bypass, so deep update
+uses `ODataModel` relative bindings and needs no raw `fetch`.
 
 ---
 
 ## How the UI is refreshed
 
 Not with `requestSideEffects` on UI contexts. After a successful write or action, `refreshBindings`
-(`runtime/BindingRefresher.ts`) goes through the model's bindings and calls `refresh()` on every **absolute list or
-context binding** of the affected entity sets, i.e. the list report's table and an open object page. That re-reads
-the whole collection or entity.
+(`runtime/BindingRefresher.ts`) calls `refresh()` on every **absolute list or context binding** of the affected entity
+sets, i.e. the list report's table and an open object page, which re-reads the whole collection or entity. A refresh
+is simple and always correct, at the price of an extra read; the tool works on its own detached binding, so there is no
+UI context to target.
 
-What is refreshed:
+Refreshed are the written entity set and, after deep writes, every touched composition target and the parent sets
+reached through partner navigation properties (so an open `Books` object page sees a changed `Chapter`). After an
+action it is the sets named by its `Common.SideEffects` (`TargetEntities`), or everything if the service says nothing;
+unbound actions refresh everything.
 
-- the entity set that was written, plus, after deep writes, every composition target that was touched and the
-  parent sets reached through partner navigation properties (so an open `Books` object page sees a changed
-  `Chapter`);
-- after an action, the sets named by its `Common.SideEffects` (`TargetEntities`), or everything if the service says
-  nothing; unbound actions refresh everything.
-
-Why not side effects on UI contexts: the tool works on its own detached binding, not on the context behind a table
-row, so there is no UI context to target. A refresh is simple and always correct, at the price of an extra read.
-
-- Bindings with **pending user changes are skipped**, so an agent never discards a user's unsaved edits. Their view
-  stays stale until the user saves or cancels; the result's `ui.skippedPendingChanges` says so.
-- Relative bindings are not refreshed on their own, only together with their parent binding.
-
-A finer approach (finding the table's context for the changed key and calling `requestSideEffects` on it) is
-possible and would cut the traffic. It is not implemented.
+- Bindings with **pending user changes are skipped**, so an agent never discards unsaved edits. Their view stays stale
+  until the user saves or cancels; `ui.skippedPendingChanges` says so.
+- Relative bindings are refreshed only together with their parent binding.
+- A finer approach (calling `requestSideEffects` on the table's context for the changed key) would cut traffic but is
+  not implemented.
 
 ---
 
 ## Security and authorization
 
 - Tools run **in the user's browser session**, with the user's token or cookie. An agent can do what the user can do,
-  nothing more. Every request is checked by your backend (XSUAA, `@restrict` and so on) as usual.
-- Tools are generated from `$metadata`, which describes the *service*, not the current user. See
-  [Limitations](#limitations) for what that means for read-only users.
-- Results that carry data from the service are marked `untrustedContentHint`: treat them as untrusted input to the
-  agent (prompt injection through data is possible).
-- **Confirmation is configurable.** Deletes ask the user by default (`confirmDestructive`). `confirmWrites` adds
-  create, update, move, batch and singleton updates; `confirmActions` adds actions (all or by name). Tools that ask
-  carry `consequentialHint`, and `app.describe_service` lists them. By default **actions and other writes do not
-  ask**, so don't expose destructive actions you would not want triggered by a prompt, or turn the options on.
-- Updates and deletes check the entry's ETag against a fresh read, so an agent cannot overwrite changes made after
-  it last read the entry (`precondition`).
-- The `expand` of a query is checked against the navigation properties; draft data (`DraftAdministrativeData`,
-  `SiblingEntity`) cannot be reached, and results are bounded by `maxTop` and `maxResultChars`.
-- A cancelled call (`signal`) does not submit, and closes its confirmation dialog.
-- `exposedTo` restricts which origins may call the tools.
+  nothing more; your backend (XSUAA, `@restrict`, ...) checks every request as usual.
+- Tools come from `$metadata`, which describes the *service*, not the current user (see [Limitations](#limitations)).
+- Results with service data are marked `untrustedContentHint`: treat them as untrusted input to the agent (prompt
+  injection through data is possible).
+- **Confirmation is configurable.** Deletes ask by default (`confirmDestructive`); `confirmWrites` adds create,
+  update, move, batch and singleton updates; `confirmActions` adds actions (all or by name). Tools that ask carry
+  `consequentialHint` and are listed by `app.describe_service`. By default **actions and other writes do not ask**, so
+  don't expose destructive actions you would not want triggered by a prompt, or turn the options on.
+- Updates and deletes compare the entry's ETag with a fresh read, so an agent cannot overwrite changes made after it
+  last read the entry (`precondition`).
+- A query's `expand` is checked against the navigation properties, so draft data (`DraftAdministrativeData`,
+  `SiblingEntity`) cannot be reached; results are bounded by `maxTop` and `maxResultChars`.
+- A cancelled call (`signal`) does not submit and closes its confirmation dialog. `exposedTo` restricts which origins
+  may call the tools.
 
 ---
 
@@ -370,58 +358,50 @@ possible and would cut the traffic. It is not implemented.
 
 **Platform**
 - **OData V4 only**, through `sap.ui.model.odata.v4.ODataModel`. One model per `register` call.
-- WebMCP is experimental and browser support is limited. Registration through the browser's native API has **not**
-  been verified in this project (handlers were verified with a stand-in, see [Status](#status)).
-- Tools are registered on the **document of your app**. If the app runs inside an iframe (SAP Build Work Zone may
-  host it that way), whether an agent can see the tools depends on the browser's WebMCP implementation. Not verified.
-- Developed and tested with SAPUI5 1.153/1.154 and CAP; other OData V4 backends should work but are untested.
-  CAP's `$metadata` of the sample does not contain several annotations the library reads (`NonUpdatableProperties`,
-  `RequiredProperties`, ...); those are covered by unit tests only.
+- WebMCP is experimental. The handlers were verified with a stand-in for `document.modelContext`, and on a deployed
+  Work Zone site the tools were seen and used through a WebMCP browser extension, also inside Work Zone's iframe (see
+  [Status](#status)). Whether an agent sees tools registered in an iframe depends on the browser's WebMCP implementation.
+- Developed and tested with SAPUI5 1.153/1.154 and CAP; other OData V4 backends should work but are untested. CAP's
+  `$metadata` of the sample lacks several annotations the library reads (`NonUpdatableProperties`,
+  `RequiredProperties`, ...), which are covered by unit tests only.
 
 **Metadata and generation**
-- Metadata is read **once at startup**; a changed service needs a reload. A failed read is logged and registers
-  nothing.
-- `$metadata` is not user specific. A read-only user may still get write tools and see them fail with `403`.
-  Hide them with `entitySets.<Set>.operations` if that matters.
+- Metadata is read **once at startup**; a changed service needs a reload. A failed read is logged and registers nothing.
+- `$metadata` is not user specific: a read-only user may still get write tools and see them fail with `403`. Hide them
+  with `entitySets.<Set>.operations` if that matters.
 - Only static annotations are evaluated. Dynamic restrictions (path expressions) are not, except
-  `Core.OperationAvailable` paths, which are checked on the loaded entry. `Common.SideEffects` is used for
-  actions only, and only its entity targets decide what is refreshed.
+  `Core.OperationAvailable` paths, which are checked on the loaded entry. `Common.SideEffects` is used for actions only,
+  and only its entity targets decide what is refreshed.
 - CAP text tables (`*_texts`) get no tools unless included, so translations cannot be edited.
-- Media streams (`Edm.Stream`) and Geo types are not supported; `Edm.Binary` is passed as base64. Operation
-  parameters of entity type are free-form objects.
+- Media streams (`Edm.Stream`) and Geo types are not supported; `Edm.Binary` is passed as base64; operation parameters
+  of entity type are free-form objects.
 - Hierarchies: draft-enabled hierarchies and hierarchies with several key properties get no hierarchy tools;
-  `nextSibling` is not offered for moves; `ancestors` walks up the parent key on the client because CAP's own
+  `nextSibling` is not offered for moves; `ancestors` walks up the parent key on the client because CAP's
   `ancestors(...)` only returns the start node.
-- Aggregation: only `groupby`, `aggregate` and `filter`; custom aggregates are supported by the code but not
-  exercised against the sample.
+- Aggregation: only `groupby`, `aggregate` and `filter`. Grouping is limited to the properties the service lists as
+  groupable, so path expressions such as `groupby((author/name))`, which CAP accepts, are not offered. A custom
+  aggregate (CAP: `@Aggregation.default` on the measure plus `@Aggregation.CustomAggregate#<name>`) has its own method,
+  so `with` is left out; if the property is also listed as aggregatable, a `with` from that list is used instead.
+- To-one compositions: an update changes the existing child or deletes it with `null`, but cannot create a missing one
+  (it fails with a clear message); draft nodes have no create tool of their own.
 
 **Behavior**
 - `.query` returns at most `maxTop` rows per call; the agent pages with `skip` and sees `count` and `hasMore`.
-- Draft handling: active data only, no draft editing, check-then-write (a draft created in the instant between the
-  check and the write is caught only by the server).
-- Refresh behavior and its gaps: see [How the UI is refreshed](#how-the-ui-is-refreshed). Relative list bindings
-  re-request their children, so a deep update costs one extra GET per list.
-- `messages` of a result are the UI5 messages that appeared since the call started; with **concurrent calls** one
-  call can report a message that belongs to another.
-- `app.get_current_context` finds tables by duck typing (controls with `getSelectedContexts`), and does not report
-  field values being edited on an object page.
-- `app.navigate` assumes the Fiori elements hash format; freestyle apps with other routes are not supported.
-- Dialogs and toasts are translated (English, German); tool descriptions and error messages are English only.
-  With `transpileDependencies` the UI5 dev server serves only the transpiled code of the library, so during
-  development the built-in English texts are used; the built app serves the bundle.
-- To-one compositions, a hierarchy-style self-composition (`Genres.children`) and a server-side validation failure in
-  the middle of a deep update were not verified in a browser.
+- Drafts: active data only, no draft editing, check-then-write (a draft created between the check and the write is
+  caught only by the server).
+- Refresh gaps: see [How the UI is refreshed](#how-the-ui-is-refreshed). Relative list bindings re-request their
+  children, so a deep update costs one extra GET per list.
+- `messages` of a result are the UI5 messages that appeared since the call started; with **concurrent calls** one call
+  can report a message that belongs to another.
+- `app.get_current_context` finds tables by duck typing (controls with `getSelectedContexts`) and does not report
+  field values being edited on an object page. `app.navigate` assumes the Fiori elements hash format.
 
-**Deferred** (not part of this version)
-- upload of media and `Edm.Stream` properties
-- per-user tool filtering (the metadata is not user specific)
-- publishing to npm and a JavaScript build of the library
-- refreshing through `requestSideEffects` on UI contexts
-- verifying the Work Zone iframe
+**Deferred** (not part of this version): upload of media and `Edm.Stream` properties; per-user tool filtering (the
+metadata is not user specific); publishing to npm and a JavaScript build; refreshing through `requestSideEffects` on UI
+contexts.
 
-**Packaging**
-- The library is not published to npm and ships as TypeScript, so consuming apps need `ui5-tooling-transpile`.
-- Deployed apps must bundle the library themselves (the sample does it with the zipper task).
+**Packaging**: the library ships as TypeScript and is not published to npm, so consuming apps need
+`ui5-tooling-transpile` and must bundle the library themselves (the sample does it with the zipper task).
 
 ---
 
@@ -433,15 +413,17 @@ branch of the library:
 | What | Where |
 |---|---|
 | Draft-enabled root with ETag and three levels of compositions | `Books` → `chapters` → `sections` |
-| Plain CRUD | `Authors` |
+| To-one composition | `Books.cover` → `Covers` |
+| Plain CRUD; read-only; insert-only | `Authors`; `Currencies`; `Orders` |
 | Recursive hierarchy, three levels | `Genres` (`@hierarchy`) |
-| Read-only and insert-only entities | `Currencies`, `Orders` |
-| Aggregation announced with `Aggregation.ApplySupported` | `Books` (group by genre, author, currency; sum/min/max/average of stock and price) |
+| Aggregation (`Aggregation.ApplySupported`) | `Books`: group by genre, author, currency; sum/min/max/average of stock and price; `stock` is also a custom aggregate (`@Aggregation.default: #SUM`, as CAP documents it) |
 | Singleton | `Shop` |
-| Bound action, with `Common.SideEffects` | `Books.addStock` |
+| Bound action with `Common.SideEffects` | `Books.addStock` |
 | Bound action with `Core.OperationAvailable: in.hasStock` | `Books.sellOne` |
 | One action name bound to two sets (overload) | `Books.rename(title)`, `Authors.rename(name)` |
-| Action bound to a collection | `Authors.normalizeNames` |
+| Action bound to a collection | `Authors.normalizeNames` (on `Books` it would need an `If-Match` header because of the ETag) |
+| Action on a draft node | `Chapters.touch` |
+| Server-side validation, to see a failing deep update | a chapter titled `BAD` is rejected |
 | Unbound action and function | `emojifyBooks`, `topBooks` |
 
 ```
@@ -449,20 +431,17 @@ npm install
 npm run watch          # cds watch, opens http://localhost:4004/ui5webmcpodatasamplebooks/index.html
 ```
 
-It runs with an in-memory SQLite database (reset on every restart) and **mocked authentication**. Sign in with
+It runs with an in-memory SQLite database (reset on every restart) and **mocked authentication**:
 
 | User | Password | Roles |
 |---|---|---|
 | `alice` | `alice` | `Admin`: read, write, run actions |
 | `bob` | `bob` | `Viewer`: read, and call `topBooks` |
 
-The restrictions are declared on the entities and operations (`sample/srv/catalog-service.cds`) and apply to the AI
-agent exactly as to the user. Note that CAP ignores `@restrict` on the *service* itself; use entity or operation level.
-Checked in the browser: `bob` can read, aggregate and call `topBooks`; every write, batch, action and singleton update
-fails with `forbidden`. Because `$metadata` is identical for both users, `bob`'s agent still gets write tools.
-
-A bound action on an entity with an ETag (`Books`) needs an `If-Match` header, also when it is bound to the
-collection, which is why the collection-bound action is on `Authors`.
+The restrictions are declared on the entities and operations (`sample/srv/catalog-service.cds`; CAP ignores
+`@restrict` on the *service* itself) and apply to the AI agent exactly as to the user. Checked in the browser: `bob`
+can read, aggregate and call `topBooks`; every write, batch, action and singleton update fails with `forbidden`.
+Because `$metadata` is identical for both users, `bob`'s agent still gets write tools.
 
 ---
 
@@ -545,59 +524,63 @@ npm run typecheck       # tsc over src and tests
 npm run lint:ui5 --workspace=packages/webmcp-odata
 ```
 
-- `packages/webmcp-odata/src/ui5/webmcp/odata/`: `WebMCP.ts` (entry), `metadata/` (introspection, annotations,
-  JSON Schema, and the pure decisions: `ApplyBuilder`, `DeepSchema`, `HierarchyQuery`, `ToolNames`, `Validate`,
-  `ServiceDescription`), `tools/` (entity set, batch, aggregate, hierarchy, singleton, generic, operation and app
-  tools), `runtime/` (keys, results, drafts, deep payload/diff/apply, groups, refresh, texts),
-  `i18n/i18n*.properties`
+- `packages/webmcp-odata/src/ui5/webmcp/odata/`: `WebMCP.ts` (entry), `metadata/` (introspection, annotations, JSON
+  Schema and the pure decisions: `ApplyBuilder`, `DeepSchema`, `HierarchyQuery`, `ToolNames`, `Validate`,
+  `ServiceDescription`), `tools/` (entity set, batch, aggregate, hierarchy, singleton, generic, operation, app),
+  `runtime/` (keys, results, drafts, deep payload/diff/apply, groups, refresh, texts), `i18n/i18n*.properties`
 - The node test runner cannot load UI5, so every decision lives in a pure module with its own test; the UI5 handlers
   stay thin and are verified in the browser against the sample.
 - Texts for the user go through `text("key")` (`runtime/I18n.ts`); a test keeps the code, both bundles and the
   built-in defaults in sync.
-- Two lessons about the UI5 build: an inline `export { x, type T }` compiles to a runtime reference and breaks the
-  component, and tool modules must not import each other in a cycle (AMD).
-- `.mcp.json` configures the UI5, CAP and Fiori MCP servers, to look up APIs while developing (see `CLAUDE.md`)
+- UI5 build lessons: an inline `export { x, type T }` compiles to a runtime reference and breaks the component, and
+  tool modules must not import each other in a cycle (AMD).
+- `.mcp.json` configures the UI5, CAP and Fiori MCP servers for looking up APIs (see `CLAUDE.md`).
 
-**Browser checks.** Start the sample (`npx cds-serve --port 4004` in `sample/`). The automated Chrome cannot answer
-the basic-auth prompt, so put a small proxy in front that adds the `Authorization` header, open the app through it
-with a stand-in for `document.modelContext` (see step 5 above) installed as an init script, and call the tools. UI5
-confirmation dialogs need a real key press (`Enter`/`Escape`); a DOM `click()` does nothing. Don't leave a page with
-pending `$batch` requests open: a few hung requests starve every other tab.
+**Browser checks.** Start the sample (`npx cds-serve --port 4004` in `sample/`). The automated Chrome cannot answer the
+basic-auth prompt, so put a small proxy in front that adds the `Authorization` header, open the app through it with the
+`document.modelContext` stand-in (step 5 above) as an init script, and call the tools. UI5 confirmation dialogs need a
+real key press (`Enter`/`Escape`); a DOM `click()` does nothing. Don't leave a page with pending `$batch` requests
+open: a few hung requests starve every other tab.
 
 ---
 
 ## Status
 
-- **Unit tests** (`npm test`, 202): Edm to JSON Schema mapping, capability and annotation parsing, introspection
-  against a metadata fixture (hierarchy, aggregation, singleton, overloads, collection-bound operations, draft
-  nodes), deep schema, payload and diff, `$apply` builder, hierarchy queries and the cycle check, tool names, the
-  schema validator, write schemas, ETag and limit helpers, availability and side-effect targets, the service
-  description, and the message bundles. **UI5 linter** and `tsc`: clean.
-- **In a browser**, against the sample, with a stand-in for `document.modelContext` (the handlers ran against the
-  real `ODataModel`):
-  - registration from metadata (restricted sets get fewer tools), query/get/create/update/delete with count,
-    paging, ETags and `precondition`;
-  - deep create on three levels; deep update that edits, creates and deletes children at two levels, atomically,
-    with the confirmation before children are deleted; the draft guard (`draftExists` for update, delete, action);
-  - aggregation with draft data not counted; all hierarchy modes, moves with their subtree, cycle and unknown-node
-    refusals; batches with a rollback on a server-side validation failure; two concurrent updates; an aborted call
-    that saves nothing;
-  - `confirmWrites` (a declined update leaves the data unchanged) and `confirmActions`; the dialog text from the
-    built-in texts; generic mode (25 tools instead of 45) and `genericThreshold`;
+- **Unit tests** (`npm test`, 207) cover Edm to JSON Schema mapping, capability and annotation parsing, introspection
+  against a metadata fixture (hierarchy, aggregation, singleton, overloads, collection-bound operations, draft nodes),
+  deep schema/payload/diff, the `$apply` builder, hierarchy queries and the cycle check, tool names, the schema
+  validator, write schemas, ETag and limit helpers, availability and side-effect targets, the service description and
+  the message bundles. **UI5 linter** and `tsc`: clean.
+- **In a browser**, against the sample, with a stand-in for `document.modelContext` (the handlers ran against the real
+  `ODataModel`):
+  - registration from metadata; query/get/create/update/delete with count, paging, ETags and `precondition`;
+  - deep create on three levels; deep update that edits, creates and deletes children, atomically, with the
+    confirmation before deletion; a to-one composition (create, change, `null` deletes); a self-composition
+    (`Genres.children`: a left-out child is deleted with its subtree, three levels in one call); a server-side
+    validation failure mid-update (`validation` with the property as target, nothing saved, no pending changes);
+  - the draft guard (`draftExists` for update, delete, action, and an action on a draft node);
+  - aggregation with draft data not counted, checked against CAP's documented `$apply` support (methods, `$count as`,
+    custom aggregates with and without `with`, rejections); all hierarchy modes, moves with their subtree, cycle and
+    unknown-node refusals;
+  - batches with a rollback on a server-side validation failure; two concurrent updates; an aborted call that saves
+    nothing;
+  - `confirmWrites` (a declined update leaves the data unchanged) and `confirmActions`; generic mode (25 tools instead
+    of 45) and `genericThreshold`;
   - the singleton, the overloaded `rename`, the collection-bound `normalizeNames`, `OperationAvailable`
     (`notAvailable` for a sold-out book), and the `bob` run (reads work, all writes `forbidden`);
   - UI refresh of the Fiori elements list, selection and navigation tools, `currentEntity`.
 - **Deployment preparation**: the production CDS build, the app build with the library bundled into
-  `ui5webmcpodatasamplebooks.zip`, and the full `mbt build` (produces `sample/mta_archives/*.mtar`; the app archive
-  inside contains the library). The deployment itself is done by the project owner, see above. The final project
-  (app id `ui5webmcpodatasamplebooks`) was built with `mbt build`, its ids were cross-checked, and it was run locally
-  with `alice` and `bob`. That was done before the changes of this version; the build was not repeated since.
-- **Cloud Foundry / Work Zone**: a version of the sample generated by `cds add` with the library added (same structure,
-  other names) was deployed by the project owner and appeared in Work Zone's Content Explorer. The renamed version
-  (`ui5-webmcp-odata-sample`) has not been deployed since the rename.
+  `ui5webmcpodatasamplebooks.zip` (it contains the i18n bundles), and the full `mbt build` (`sample/mta_archives/*.mtar`).
+  The final project (app id `ui5webmcpodatasamplebooks`) was built, its ids cross-checked, and run locally with `alice`
+  and `bob`. The `mbt build` predates this version's changes and was not repeated. Deployment itself is done by the
+  project owner, see above.
+- **Cloud Foundry / Work Zone**: a version of the sample generated by `cds add` with the library added (same
+  structure, other names) was deployed by the project owner and appeared in Work Zone's Content Explorer. The renamed
+  version (`ui5-webmcp-odata-sample`) has not been deployed since the rename. On a deployed Work Zone site the tools
+  were registered through the browser's WebMCP API and visible to an agent through the WebMCP extension (so the iframe
+  case works), and a confirmed update produced the expected requests (draft check, fresh read, the call, one refresh
+  of the list).
 
-Not verified: registration through the browser's native WebMCP API, the WebMCP Inspector, the German texts in a
-browser (the dev server does not serve the bundle; a test only checks the files), the `SideEffects` refresh and the
-draft-node guard for actions (the sample has no matching action), custom aggregates, and what happens when the tools
-run inside the Work Zone iframe (a signed-in launch, the tools being visible to an agent, the HANA/XSUAA runtime
-behavior of the deployed app).
+Not verified: the German texts in a browser (the dev server does not serve the bundle, so it shows English); the
+`SideEffects` target selection beyond the unit test (the list reloads after `addStock`, but only one list is on
+screen, so it cannot show that other sets are skipped); the HANA/XSUAA runtime behavior of the deployed app.

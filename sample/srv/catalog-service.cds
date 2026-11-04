@@ -32,7 +32,13 @@ service CatalogService {
     action normalizeNames() returns Integer;
   };
 
-  entity Chapters as projection on my.Chapters;
+  // A node of the draft tree: only changed through Books. The action tests the draft guard on nodes.
+  entity Chapters as projection on my.Chapters actions {
+    @Core.Description: 'Renumbers nothing, only touches the chapter and returns it (test action on a draft node).'
+    action touch() returns Chapters;
+  };
+
+  entity Covers as projection on my.Covers;
 
   entity Sections as projection on my.Sections;
 
@@ -179,3 +185,21 @@ annotate CatalogService.Books actions {
     TargetProperties: ['stock']
   };
 };
+
+annotate CatalogService.Covers with @(restrict: [
+  {
+    grant: 'READ',
+    to   : ['Viewer', 'Admin']
+  },
+  {
+    grant: '*',
+    to   : 'Admin'
+  }
+]);
+
+// Custom aggregate as CAP documents it: the measure names its default method, the entity exposes the aggregate.
+// `aggregate(stock)` then means `aggregate(stock with sum as stock)`.
+annotate CatalogService.Books with {
+  stock @Aggregation.default: #SUM;
+};
+annotate CatalogService.Books with @Aggregation.CustomAggregate #stock: 'Edm.Int32';

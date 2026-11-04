@@ -25,6 +25,15 @@ entity Books : cuid, managed {
   hasStock : Boolean = (stock > 0);
   chapters : Composition of many Chapters
                on chapters.book = $self;
+  // To-one composition
+  cover    : Composition of one Covers
+               on cover.book = $self;
+}
+
+entity Covers : cuid {
+  book  : Association to Books;
+  color : String(40);
+  style : String(40);
 }
 
 entity Chapters : cuid {

@@ -45,7 +45,9 @@ export async function queueDeepChanges(
     if (value === undefined) {
       continue;
     }
-    if (composition.isCollection) {
+    if (value === null && !composition.isCollection) {
+      await queueDeleteSingle(model, parent, composition, groupId, queue);
+    } else if (composition.isCollection) {
       await queueCollection(model, parent, composition, value as Input[], groupId, queue);
     } else {
       await queueSingle(model, parent, composition, value as Input, groupId, queue);
@@ -161,4 +163,22 @@ async function queueSingle(
   }
   changeProperties(composition, context, changes, groupId, queue);
   await queueDeepChanges(model, context, composition.compositions, entry, groupId, queue);
+}
+
+/** `null` for a to-one composition deletes the child, if there is one */
+async function queueDeleteSingle(
+  model: ODataModel,
+  parent: Context,
+  composition: CompositionDescriptor,
+  groupId: string,
+  queue: Queued,
+): Promise<void> {
+  const binding = model.bindContext(composition.name, parent, {
+    $$updateGroupId: groupId,
+  });
+  queue.bindings.push(binding);
+  if (await binding.requestObject()) {
+    queue.deleted += 1;
+    queue.pending.push(binding.getBoundContext().delete(groupId));
+  }
 }

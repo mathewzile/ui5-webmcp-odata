@@ -43,7 +43,15 @@ export function compositionSchemas(
         : `Complete list of ${composition.name} (${type}). Entries with a key that exists are updated (only the properties given), entries without a known key are created, existing entries missing here are DELETED. Leave out to keep them unchanged`;
     schemas[composition.name] = composition.isCollection
       ? { type: "array", items: item, description }
-      : { ...item, description };
+      : {
+          ...item,
+          // On update a to-one child can be removed with null
+          ...(mode === "create" ? {} : { type: ["object", "null"] }),
+          description:
+            mode === "create"
+              ? description
+              : `${composition.name} (${type}): the existing child is changed in place (only the properties given), null DELETES it. Leave out to keep it unchanged`,
+        };
   }
   return schemas;
 }

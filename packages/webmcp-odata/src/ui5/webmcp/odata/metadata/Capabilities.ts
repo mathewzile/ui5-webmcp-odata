@@ -228,14 +228,19 @@ export function readAggregation(
     return undefined;
   }
   const aggregatable = support.AggregatableProperties;
-  const customAggregates = [setAnnotations, typeAnnotations].flatMap((annotations) =>
-    Object.entries(annotations)
-      .filter(([term]) => term.startsWith(TERM.customAggregate))
-      .map(([term, edmType]) => ({
-        name: term.slice(TERM.customAggregate.length),
-        edmType: typeof edmType === "string" ? edmType : "Edm.String",
-      })),
-  );
+  // CAP puts the annotation on the entity set and on its type: one entry per name
+  const customAggregates = [
+    ...new Map(
+      [setAnnotations, typeAnnotations].flatMap((annotations) =>
+        Object.entries(annotations)
+          .filter(([term]) => term.startsWith(TERM.customAggregate))
+          .map(([term, edmType]) => [
+            term.slice(TERM.customAggregate.length),
+            typeof edmType === "string" ? edmType : "Edm.String",
+          ] as const),
+      ),
+    ),
+  ].map(([name, edmType]) => ({ name, edmType }));
   return {
     transformations: Array.isArray(support.Transformations)
       ? (support.Transformations as string[])

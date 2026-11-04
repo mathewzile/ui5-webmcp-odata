@@ -141,6 +141,15 @@ describe("readAggregation", () => {
     });
   });
 
+  it("lists a custom aggregate once if it is annotated on the set and on the type", () => {
+    const annotation = { "@Org.OData.Aggregation.V1.CustomAggregate#stockTotal": "Edm.Int32" };
+    const aggregation = readAggregation(
+      { "@Org.OData.Aggregation.V1.ApplySupported": { Transformations: ["aggregate"] }, ...annotation },
+      annotation,
+    );
+    assert.deepEqual(aggregation?.customAggregates, [{ name: "stockTotal", edmType: "Edm.Int32" }]);
+  });
+
   it("leaves the lists open if the annotation names none", () => {
     const aggregation = readAggregation(
       { "@Org.OData.Aggregation.V1.ApplySupported": { Transformations: ["groupby"] } },

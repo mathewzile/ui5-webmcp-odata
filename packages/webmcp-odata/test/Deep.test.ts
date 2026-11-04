@@ -104,6 +104,35 @@ describe("compositionSchemas", () => {
   });
 });
 
+describe("to-one compositions", () => {
+  const cover: CompositionDescriptor = {
+    name: "cover",
+    typeName: "ns.Cover",
+    isCollection: false,
+    foreignKeys: ["book_ID"],
+    compositions: [],
+    properties: [
+      property("ID", { isKey: true, nullable: false, computedDefault: true }),
+      property("book_ID"),
+      property("color"),
+    ],
+  };
+
+  it("can be removed with null on update, but not on create", () => {
+    const update = compositionSchemas([cover], "update").cover as { type: unknown; description: string };
+    assert.deepEqual(update.type, ["object", "null"]);
+    assert.match(update.description, /null DELETES/);
+    const create = compositionSchemas([cover], "create").cover as { type: unknown };
+    assert.equal(create.type, "object");
+  });
+
+  it("leaves null out of the body of a new parent", () => {
+    const parent: CompositionDescriptor = { ...chapters, compositions: [cover] };
+    const payload = childPayload(parent, { title: "T", cover: null }) as Record<string, unknown>;
+    assert.ok(!("cover" in payload));
+  });
+});
+
 describe("diffChildren", () => {
   const existing = [
     { ID: "a", title: "A" },

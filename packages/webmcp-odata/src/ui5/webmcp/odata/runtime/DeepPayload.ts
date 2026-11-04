@@ -54,7 +54,7 @@ export function childPayload(
       }
     }
     for (const nested of composition.compositions) {
-      if (child[nested.name] !== undefined) {
+      if (child[nested.name] !== undefined && child[nested.name] !== null) {
         payload[nested.name] = childPayload(nested, child[nested.name]);
       }
     }

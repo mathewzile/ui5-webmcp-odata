@@ -37,25 +37,31 @@ export function createAggregateTool(
       description:
         "Aggregates per group, e.g. [{property:'stock',with:'sum',as:'total'}]" +
         (rules.customAggregates.length
-          ? `. Custom aggregates (${rules.customAggregates.join(", ")}) take any 'with'`
+          ? `. Custom aggregates (${rules.customAggregates.join(", ")}) have their own method: leave 'with' out`
           : ""),
       items: objectSchema(
         {
           property: {
             type: "string",
             enum: [
-              ...rules.aggregatable.map((entry) => entry.property),
-              ...rules.customAggregates,
+              ...new Set([
+                ...rules.aggregatable.map((entry) => entry.property),
+                ...rules.customAggregates,
+              ]),
             ],
           },
-          with: { type: "string", enum: [...AGGREGATION_METHODS] },
+          with: {
+            type: "string",
+            enum: [...AGGREGATION_METHODS],
+            description: "Method; required unless the property is a custom aggregate",
+          },
           as: {
             type: "string",
             pattern: "^[A-Za-z_][A-Za-z0-9_]*$",
             description: "Name of the result column",
           },
         },
-        ["property", "with", "as"],
+        ["property", "as"],
       ),
     },
     count: {

@@ -69,6 +69,22 @@ describe("buildApply", () => {
     );
   });
 
+  it("uses the method of a property that is aggregatable and a custom aggregate", () => {
+    const both = { ...rules, customAggregates: ["stock"], draft: false };
+    const apply = (item: { with?: string }) =>
+      buildApply({ aggregate: [{ property: "stock", as: "t", ...item }] }, both).apply;
+    assert.equal(apply({ with: "average" }), "aggregate(stock with average as t)");
+    assert.equal(apply({}), "aggregate(stock as t)");
+    assert.throws(() => apply({ with: "min" }), /Cannot use min on stock/);
+  });
+
+  it("needs a method unless the aggregate is a custom one", () => {
+    assert.throws(
+      () => buildApply({ aggregate: [{ property: "price", as: "x" }] }, rules),
+      /price needs a method \(max\)/,
+    );
+  });
+
   it("refuses names and methods the service does not allow", () => {
     assert.throws(() => buildApply({ groupBy: ["title"] }, rules), /Cannot group by title/);
     assert.throws(

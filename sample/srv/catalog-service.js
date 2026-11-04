@@ -13,7 +13,7 @@ const stripEmoji = (title = "") =>
 
 export default class CatalogService extends cds.ApplicationService {
   init() {
-    const { Books, Authors } = this.entities;
+    const { Books, Authors, Chapters } = this.entities;
 
     // Bound action: Books(ID=...,IsActiveEntity=true)/CatalogService.addStock
     this.on("addStock", Books, async (req) => {
@@ -69,6 +69,18 @@ export default class CatalogService extends cds.ApplicationService {
         }
       }
       return changed;
+    });
+
+    // Server-side validation, to see how a failure in the middle of a deep update is reported
+    this.before(["CREATE", "UPDATE"], Chapters, (req) => {
+      if (req.data.title === "BAD") {
+        req.error({ status: 400, message: "A chapter must not be called BAD", target: "title" });
+      }
+    });
+
+    this.on("touch", Chapters, async (req) => {
+      const [{ ID }] = req.params;
+      return SELECT.one.from(Chapters, ID);
     });
 
     this.on("topBooks", async (req) => {

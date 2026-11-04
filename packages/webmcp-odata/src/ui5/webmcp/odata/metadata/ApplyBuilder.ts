@@ -24,7 +24,8 @@ const ALIAS = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
 export interface AggregateItem {
   property: string;
-  with: string;
+  /** Method; left out for a custom aggregate, which has its own */
+  with?: string;
   as: string;
 }
 
@@ -155,10 +156,14 @@ export function buildApply(input: AggregateInput, rules: AggregationRules): Buil
       );
     }
     addColumn(item.as);
-    if (custom) {
-      // A custom aggregate has its method built in
+    // A custom aggregate has its method built in (CAP: `@Aggregation.default`). An explicit method is only
+    // used if the property is also listed as aggregatable, so it never silently gets another method.
+    if (custom && (!entry || !item.with)) {
       expressions.push(`${item.property} as ${item.as}`);
       continue;
+    }
+    if (!item.with) {
+      throw new Error(`${item.property} needs a method (${entry!.methods.join(", ")})`);
     }
     if (!entry!.methods.includes(item.with)) {
       throw new Error(
