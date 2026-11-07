@@ -1,6 +1,6 @@
 {
   "name": "ui5-webmcp-odata",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "UI5 library that derives WebMCP tools from OData V4 metadata",
   "keywords": [
     "ui5",
