@@ -569,6 +569,10 @@ npm run build:package --workspace=packages/webmcp-odata   # JS package in packag
 Publish `packages/webmcp-odata/dist/package` (`npm publish packages/webmcp-odata/dist/package`), never the workspace
 folder: that one is `private` and holds TypeScript sources.
 
+**Releasing.** Bump `version` in `packages/webmcp-odata/package.json`, commit, then push a tag `v<version>`. The
+`Stage release on npm` workflow checks, builds and stages the package (npm trusted publishing, no token). Then approve
+the staged version on npmjs.com or with `npm stage list` and `npm stage approve <stage-id>` (asks for 2FA).
+
 - `packages/webmcp-odata/src/ui5/webmcp/odata/`: `WebMCP.ts` (entry), `metadata/` (introspection, annotations, JSON
   Schema and the pure decisions: `ApplyBuilder`, `DeepSchema`, `HierarchyQuery`, `ToolNames`, `Validate`,
   `ServiceDescription`), `tools/` (entity set, batch, aggregate, hierarchy, singleton, generic, operation, app),

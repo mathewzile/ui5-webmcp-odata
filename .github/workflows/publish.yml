@@ -1,0 +1,52 @@
+name: Stage release on npm
+
+# Runs when a version tag such as v0.2.0 is pushed. Stages packages/webmcp-odata/dist/package (never the workspace
+# folder: that one is private and holds TypeScript sources). The release goes live only after a maintainer approves
+# it on npmjs.com or with `npm stage approve <stage-id>` (needs 2FA, so this last step is not part of CI).
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+  id-token: write # npm trusted publishing (OIDC) and provenance, no NPM_TOKEN needed
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24 # ships an npm that supports trusted publishing
+          registry-url: https://registry.npmjs.org
+          cache: npm
+
+      - name: Use a recent npm (staged publishing needs 11.15 or later)
+        run: npm install -g npm@latest
+
+      - run: npm ci
+
+      - name: Check that the tag matches the package version
+        run: |
+          version="$(node -p "require('./packages/webmcp-odata/package.json').version")"
+          if [ "${GITHUB_REF_NAME}" != "v${version}" ]; then
+            echo "Tag ${GITHUB_REF_NAME} does not match package version v${version}" >&2
+            exit 1
+          fi
+
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run lint:ui5
+
+      - name: Build the package
+        run: npm run build:package --workspace=packages/webmcp-odata
+
+      - name: Show what will be published
+        run: npm pack --dry-run
+        working-directory: packages/webmcp-odata/dist/package
+
+      - name: Stage the release
+        run: npm stage publish packages/webmcp-odata/dist/package --provenance --access public
