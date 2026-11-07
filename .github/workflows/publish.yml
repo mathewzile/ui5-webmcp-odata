@@ -16,13 +16,14 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
-          node-version: 24 # ships an npm that supports trusted publishing
+          node-version: 26 # current LTS; ships an npm that supports trusted publishing
           registry-url: https://registry.npmjs.org
-          cache: npm
+          # no dependency cache in a release job: a poisoned cache could expose the OIDC token
+          package-manager-cache: false
 
       - name: Use a recent npm (staged publishing needs 11.15 or later)
         run: npm install -g npm@latest

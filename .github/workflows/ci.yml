@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [24, 26] # the two LTS lines; the release workflow uses the newest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run lint:ui5
+
+      - name: Build the package
+        run: npm run build:package --workspace=packages/webmcp-odata
+
+      - name: Show what would be published
+        run: npm pack --dry-run
+        working-directory: packages/webmcp-odata/dist/package
