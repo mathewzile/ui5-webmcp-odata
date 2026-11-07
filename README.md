@@ -113,6 +113,48 @@ export default class Component extends BaseComponent {
 }
 ```
 
+**Types in a TypeScript app.** The package ships `.d.ts` files that declare the modules as ambient modules
+(`declare module "ui5/webmcp/odata/WebMCP"`), so TypeScript does not find them on its own and reports
+`TS2307: Cannot find module 'ui5/webmcp/odata/WebMCP'`. Tell TypeScript about the package in your `tsconfig.json`
+in one of three ways. All three were tested with TypeScript 5.9, 6 and 7.0.
+
+1. **`types` (recommended).** List the package next to your other type packages:
+
+   ```jsonc
+   { "compilerOptions": { "types": ["@sapui5/types", "qunit", "ui5-webmcp-odata"] } }
+   ```
+
+   TypeScript 6 and later include only the packages listed in `types` (the default is `[]`; before 6.0, every
+   `@types/*` package was included automatically), so you list your UI5 and test types anyway.
+
+2. **`typeRoots`.** If your project lists its type folders in `typeRoots`, add the library's `types` folder:
+
+   ```jsonc
+   {
+     "compilerOptions": {
+       "typeRoots": [
+         "./node_modules/@types",
+         "./node_modules/@sapui5/types",
+         "./node_modules/ui5-webmcp-odata/types"
+       ]
+     }
+   }
+   ```
+
+   With TypeScript 5.x this is enough. From TypeScript 6, `typeRoots` only says where to look and no longer includes
+   anything by itself (this affects the UI5 types as well), so also set `"types": ["*"]` (TypeScript 6 and later
+   only; 5.x rejects it) or an explicit list that names the folders, for example
+   `["types", "qunit", "ui5-webmcp-odata"]` (`types` is the folder name inside `@sapui5/types`).
+
+3. **`include`.** Add the declaration files to the files your project compiles; this leaves `types` and
+   `typeRoots` alone:
+
+   ```jsonc
+   { "include": ["./webapp/**/*", "./node_modules/ui5-webmcp-odata/src/**/*.d.ts"] }
+   ```
+
+In a monorepo with hoisted dependencies, adjust the paths, for example `../../node_modules/...`.
+
 **JavaScript**
 
 ```js
@@ -399,7 +441,7 @@ unbound actions refresh everything.
 metadata is not user specific); refreshing through `requestSideEffects` on UI
 contexts.
 
-**Packaging**: the npm package contains built JavaScript; a TypeScript app gets types from the shipped `.d.ts` files.
+**Packaging**: the npm package contains built JavaScript; a TypeScript app gets types from the shipped `.d.ts` files (list the package in `types`, see step 4).
 Apps that cannot rely on the library being present at runtime must bundle it themselves (see step 2).
 
 ---

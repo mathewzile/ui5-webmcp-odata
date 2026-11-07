@@ -11,7 +11,14 @@ const ui5Out = join(root, "dist", "ui5");
 const pkgOut = join(root, "dist", "package");
 const libPath = "ui5/webmcp/odata";
 
-rmSync(join(root, "dist"), { recursive: true, force: true });
+// Empty the folders instead of deleting them: on Windows a folder that is some shell's working directory
+// (for example after `cd dist/package && npm pack`) cannot be removed.
+const empty = (dir) => {
+	mkdirSync(dir, { recursive: true });
+	for (const name of readdirSync(dir)) rmSync(join(dir, name), { recursive: true, force: true });
+};
+empty(ui5Out);
+empty(pkgOut);
 execFileSync(
 	process.execPath,
 	[
@@ -47,6 +54,26 @@ const strip = (dir) => {
 };
 strip(target);
 
+// Entry point for TypeScript consumers: the .d.ts files declare ambient modules, so they only become known once
+// something references them. Apps use it in one of two ways: "./node_modules/ui5-webmcp-odata/types" as a
+// compilerOptions.typeRoots entry (every subfolder of a type root is a type package, so the index sits in
+// types/ui5-webmcp-odata and not in the package root next to src/), or the package name in compilerOptions.types
+// ("types" in package.json points at the index).
+const declarations = [];
+const collect = (dir) => {
+	for (const name of readdirSync(dir).sort()) {
+		const path = join(dir, name);
+		if (statSync(path).isDirectory()) collect(path);
+		else if (name.endsWith(".d.ts")) declarations.push(path.slice(pkgOut.length + 1).replaceAll("\\", "/"));
+	}
+};
+collect(join(pkgOut, "src"));
+mkdirSync(join(pkgOut, "types", "ui5-webmcp-odata"), { recursive: true });
+writeFileSync(
+	join(pkgOut, "types", "ui5-webmcp-odata", "index.d.ts"),
+	declarations.map((file) => `/// <reference path="../../${file}" />`).join("\n") + "\n"
+);
+
 const src = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
 const out = {
 	name: src.name,
@@ -59,8 +86,8 @@ const out = {
 	repository: src.repository,
 	bugs: src.bugs,
 	main: `src/${libPath}/library.js`,
-	types: `src/${libPath}/library.d.ts`,
-	files: ["src/", "ui5.yaml", "README.md", "LICENSE"],
+	types: "types/ui5-webmcp-odata/index.d.ts",
+	files: ["src/", "types/", "ui5.yaml", "README.md", "LICENSE"],
 	engines: src.engines
 };
 writeFileSync(join(pkgOut, "package.json"), JSON.stringify(out, null, 2) + "\n");
